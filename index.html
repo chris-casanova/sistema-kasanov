@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Centro de mando personal estilo videojuego con un escuadrón de agentes de IA.">
+<meta name="theme-color" content="#110F22">
+<title>Sistema KASANOV</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23110F22'/%3E%3Cpath fill='%23FFE2A8' d='M7 1h2v2H7zM6 3h4v2H6z'/%3E%3Cpath fill='%23FFB547' d='M5 5h6v2H5zM4 7h8v2H4z'/%3E%3Cpath fill='%23C7802A' d='M5 9h6v2H5zM6 11h4v2H6zM7 13h2v2H7z'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1><small>Centro de mando</small>Sistema KASANOV</h1>
+    <div class="hdr-r">
+      <span class="weekpill" id="weekpill">Semana —</span>
+      <button class="iconbtn" type="button" id="money-toggle" aria-pressed="false" title="Ocultar las cifras de dinero"></button>
+      <button class="iconbtn gear" type="button" id="gear" aria-pressed="false" aria-label="Sistema y mejora" title="Sistema y mejora"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Áreas">
+    <button role="tab" id="tab-nexo" aria-selected="true" data-group="nexo"><span class="gdot" style="background:var(--accent)"></span>Nexo</button>
+    <button role="tab" id="tab-personal" aria-selected="false" data-group="personal"><span class="gdot" style="background:var(--c3)"></span>Personal</button>
+    <button role="tab" id="tab-trabajo" aria-selected="false" data-group="trabajo"><span class="gdot" style="background:var(--c2)"></span>Trabajo y proyectos</button>
+    <button role="tab" id="tab-finanzas" aria-selected="false" data-group="finanzas"><span class="gdot" style="background:var(--c5)"></span>Finanzas</button>
+  </nav>
+
+  <div id="banner" class="status-banner" hidden></div>
+  <div id="setup" class="status-banner" hidden><span>Para activar a los agentes agrega tu API key de Anthropic.</span><button class="btn" type="button" id="setup-go">Ir a Ajustes</button></div>
+
+  <!-- NEXO -->
+  <section class="panel" id="p-nexo" role="tabpanel" aria-labelledby="tab-nexo">
+    <div class="hud">
+      <div class="card">
+        <div class="row between"><h3>Comandante</h3><span class="chip num" id="h-level">Nv 1</span></div>
+        <div class="rank" id="h-rank">Recluta</div>
+        <div class="xpbar" aria-hidden="true"><i id="h-xpbar" style="width:0%"></i></div>
+        <div class="muted num" style="font-size:.78rem" id="h-xp">0 XP</div>
+      </div>
+      <div class="card"><h3>Hoy</h3><div class="big" id="h-pts">0/3</div><span class="muted" style="font-size:.8rem" id="h-pts-s">puntos</span></div>
+      <div class="card"><h3>Racha</h3><div class="big" id="h-streak">0</div><span class="muted" style="font-size:.8rem">días cumplidos seguidos</span></div>
+      <div class="card"><h3>Misión del día</h3><div id="h-quest" class="quest"><span class="muted" style="font-size:.85rem">Pide "Planear mi día" en la consola.</span></div></div>
+    </div>
+
+    <div class="base">
+      <div class="stack" style="gap:8px">
+        <div class="scene-wrap" id="scene-wrap">
+          <canvas id="scene" width="320" height="180" tabindex="0" aria-label="Mapa de la base: el Nexo al centro, pasillos y una sala por departamento. Haz clic en un agente para darle una orden directa."></canvas>
+          <div class="overlay" id="overlay"></div>
+        </div>
+        <div class="muted" style="font-size:.8rem">Los agentes solo caminan por los pasillos. Haz clic en uno para darle una orden directa.</div>
+      </div>
+
+      <div class="card console">
+        <div class="row between"><h2>Consola del Nexo</h2><span class="chip" id="c-state">En espera</span></div>
+        <form id="cf" class="stack">
+          <label class="field">Destino
+            <select id="c-target"><option value="">Nexo decide y coordina</option></select>
+          </label>
+          <label class="field">Orden
+            <textarea id="c-text" required placeholder="Ej. Tengo 3 horas hoy y poca energía. ¿En qué avanzo de mi proyecto?"></textarea>
+          </label>
+          <div class="row">
+            <button class="btn primary" type="submit" id="c-run">Desplegar misión</button>
+            <button class="btn danger" type="button" id="c-stop" hidden>Detener</button>
+          </div>
+        </form>
+        <div class="stack" style="gap:6px">
+          <h3>Misiones rápidas</h3>
+          <div class="quick" id="quick">
+            <button type="button" data-q="Con mis datos de hoy y de esta semana, define la misión del día y el foco. Que sea concreta y alcanzable.">Planear mi día</button>
+            <button type="button" data-q="Con base en mis habilidades probadas y en práctica, mis proyectos y lo que disfruto construir, ¿qué caminos profesionales tienen más sentido para mí hoy? Compara 2 o 3 con pros y contras reales y propone un experimento pequeño para probar el más prometedor esta semana.">¿Cuál es mi camino?</button>
+            <button type="button" data-q="Propón el siguiente proyecto personal que pueda construir con vibe coding y mis habilidades reales, que me haga crecer y sirva para mostrar en mi portafolio, y el primer paso para hoy.">Siguiente proyecto</button>
+            <button type="button" data-q="Convierte lo que aprendí en los últimos días en tarjetas de repaso útiles.">Generar tarjetas</button>
+            <button type="button" data-q="Revisa mis finanzas: colchón, gastos e ingresos, y dime la decisión más importante que debo tomar este mes con mi dinero.">Revisar finanzas</button>
+            <button type="button" data-q="Revisa cómo estoy usando el sistema esta semana y qué fricción conviene quitar.">Auditar sistema</button>
+            <button type="button" data-q="Reunión general: cada departamento reporta el estado de su área y entre todos definen las 3 prioridades de la semana." data-all="1">Reunión general</button>
+          </div>
+        </div>
+        <div id="c-msg" class="muted" style="font-size:.85rem"></div>
+      </div>
+    </div>
+
+    <div class="commsgrid">
+      <div class="card comms">
+        <div class="row between"><h2>Comunicaciones</h2><select id="l-pick" aria-label="Elegir misión" style="width:auto;max-width:62%"></select></div>
+        <div id="l-summary" hidden></div>
+        <div class="log" id="log"><div class="empty">Aquí verás la conversación de cada misión: tu orden, el plan del Nexo, el reporte de cada agente y lo que se pasan entre ellos.</div></div>
+      </div>
+      <div class="card stack" id="props-card">
+        <div class="row between"><h2>Propuestas</h2><span class="chip" id="p-count">0</span></div>
+        <p class="hint">Los agentes proponen; tú decides. Al aplicar se crean tarjetas, proyectos, habilidades o la misión del día.</p>
+        <div class="stack" id="props"><div class="empty">Sin propuestas pendientes.</div></div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <h3>Escuadrón</h3>
+      <div class="roster" id="roster"></div>
+    </div>
+  </section>
+
+  <!-- PERSONAL -->
+  <section class="group" id="g-personal" role="tabpanel" aria-labelledby="tab-personal" hidden style="--gc:var(--c3)">
+    <div class="ghead">
+      <div><h2>Personal</h2><p>Tu día, tus hábitos y cómo va la semana.</p></div>
+      <div class="subnav"><button type="button" data-view="hoy">Hoy</button><button type="button" data-view="semana">Semana</button><button type="button" data-view="habitos">Mis hábitos</button></div>
+    </div>
+
+    <section class="panel" id="p-hoy" hidden>
+      <div class="row between">
+        <div class="row">
+          <button class="btn icon ghost" id="d-prev" aria-label="Día anterior">←</button>
+          <h2 id="d-label">Hoy</h2>
+          <button class="btn icon ghost" id="d-next" aria-label="Día siguiente">→</button>
+        </div>
+        <button class="btn ghost" id="d-today">Ir a hoy</button>
+      </div>
+      <div class="grid2">
+        <div class="card stack">
+          <div class="row between"><h3>Puntos del día</h3><span class="chip" id="d-status">—</span></div>
+          <div class="score"><b id="d-points">0</b><span class="muted" id="d-min">/ — mínimo</span></div>
+          <p class="hint">El día cuenta con el mínimo de puntos y al menos un hábito prioritario.</p>
+          <div class="row"><span class="chip" id="d-streak">Racha: 0 días</span><span class="chip" id="d-bonus">Bonus: 0</span></div>
+        </div>
+        <div class="card stack">
+          <h3>Sesión de estudio</h3>
+          <div class="row">
+            <label class="field" style="flex:1;min-width:120px">Minutos estudiados
+              <input type="number" id="d-min-input" min="0" step="5" inputmode="numeric" placeholder="0">
+            </label>
+            <div class="stack" style="gap:4px">
+              <span class="muted" style="font-size:.85rem">Pomodoros</span>
+              <div class="row" style="gap:6px"><button class="btn" id="pomo-add">+25</button><button class="btn" id="pomo-add50">+50</button></div>
+            </div>
+          </div>
+          <div class="muted" style="font-size:.85rem" id="d-study-target"></div>
+          <div class="stack" style="gap:4px">
+            <span class="muted" style="font-size:.85rem">Energía (1 baja · 5 alta)</span>
+            <div class="energy" id="d-energy" role="group" aria-label="Energía"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card stack">
+        <h3>Hábitos</h3>
+        <div class="checks" id="d-habits"><div class="empty">Tus hábitos aparecen aquí en cuanto cargue la configuración.</div></div>
+        <h3 style="margin-top:6px">Bonus <span class="muted" id="d-bonus-rule" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h3>
+        <div class="checks" id="d-bonuses"></div>
+      </div>
+      <div class="card stack">
+        <h3>Bitácora</h3>
+        <div class="grid2">
+          <label class="field">Qué hice o aprendí hoy (los agentes lo usan como evidencia)
+            <textarea id="d-learned" placeholder="Ej. Armé un formulario con validación usando Claude Code y entendí cómo se conecta con la base de datos"></textarea></label>
+          <label class="field">Dónde me trabé
+            <textarea id="d-blocked" placeholder="Ej. No entiendo bien cómo se despliega una app en Vercel"></textarea></label>
+          <label class="field">Victoria del día
+            <textarea id="d-win" placeholder="Algo concreto que salió bien, aunque sea pequeño"></textarea></label>
+          <label class="field">Notas libres
+            <textarea id="d-notes" placeholder="Contexto, ánimo, ideas, qué disfruté"></textarea></label>
+        </div>
+        <div class="savestate" id="d-save" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="p-semana" hidden>
+      <div class="grid2">
+        <div class="card stack">
+          <div class="row between"><h3>Esta semana</h3><span class="chip" id="w-days">0/7 días</span></div>
+          <div class="chart" id="w-chart"></div>
+          <div class="row"><span class="chip" id="w-study">0 h estudio</span><span class="chip" id="w-energy">Energía media —</span></div>
+        </div>
+        <div class="card stack"><h3>Adherencia por hábito</h3><div class="bars" id="w-bars"><div class="empty">Sin registros esta semana.</div></div></div>
+      </div>
+      <div class="grid2">
+        <div class="card stack"><h3>Últimas 4 semanas</h3><div class="heat" id="w-heat" aria-label="Mapa de días cumplidos"></div></div>
+        <div class="card stack"><h3>Progresión</h3><div class="bars" id="w-prog"></div></div>
+      </div>
+    </section>
+
+    <section class="panel" id="p-habitos" hidden>
+      <div class="card stack">
+        <h2>Mis hábitos</h2>
+        <p class="hint">Uno por línea. Antepón <span class="mono">*</span> a los prioritarios: el día solo cuenta si cumples al menos uno de ellos. Al guardar, tus registros anteriores se conservan.</p>
+        <div class="grid2">
+          <label class="field">Hábitos<textarea id="cf-habits" style="min-height:170px"></textarea></label>
+          <label class="field">Bonus (cada 3 valen 1 punto)<textarea id="cf-bonus" style="min-height:170px"></textarea></label>
+        </div>
+        <div class="row"><button class="btn primary" id="cf-save">Guardar hábitos</button><span class="savestate" id="cf-state"></span></div>
+      </div>
+    </section>
+  </section>
+
+  <!-- TRABAJO Y PROYECTOS -->
+  <section class="group" id="g-trabajo" role="tabpanel" aria-labelledby="tab-trabajo" hidden style="--gc:var(--c2)">
+    <div class="ghead">
+      <div><h2>Trabajo y proyectos</h2><p>Lo que construyes, lo que de verdad sabes hacer y tu repaso.</p></div>
+      <div class="subnav"><button type="button" data-view="proyectos">Proyectos</button><button type="button" data-view="habilidades">Habilidades</button><button type="button" data-view="repaso">Repaso</button></div>
+    </div>
+
+    <section class="panel" id="p-proyectos" hidden>
+      <div class="row between">
+        <div class="filters" id="pfilters"></div>
+        <button class="btn primary" type="button" id="pnew-btn">+ Nuevo proyecto</button>
+      </div>
+      <div class="card stack" id="pnew" hidden>
+        <h2>Nuevo proyecto</h2>
+        <form id="pf" class="stack"><div class="grid2" id="pnew-fields"></div>
+          <div class="row"><button class="btn primary" type="submit">Guardar proyecto</button><button class="btn ghost" type="button" id="pnew-cancel">Cancelar</button></div>
+        </form>
+      </div>
+      <div class="kanban" id="kanban"></div>
+    </section>
+
+    <section class="panel" id="p-habilidades" hidden>
+      <div class="card stack">
+        <div class="row between"><h2>Habilidades reales</h2><button class="btn primary" type="button" id="sk-new-btn">+ Agregar habilidad</button></div>
+        <p class="hint">Es lo que el escuadrón usa para orientar tu rumbo. Solo cuenta como habilidad lo que tiene evidencia: algo que hiciste y puedes mostrar. Lo que no has probado es una hipótesis; Rumbo profesional propone experimentos pequeños para comprobarla.</p>
+        <form id="skf" class="stack" hidden>
+          <div class="grid2">
+            <label class="field">Habilidad<input type="text" id="sk-name" required placeholder="Ej. Construir apps web con Claude Code"></label>
+            <label class="field">Nivel<select id="sk-level"><option value="probada">Probada (tengo evidencia)</option><option value="practica">En práctica</option><option value="sinprobar">Sin probar</option></select></label>
+            <label class="field">Categoría<select id="sk-cat"></select></label>
+            <label class="field">Evidencia<textarea id="sk-ev" placeholder="Qué hiciste que lo demuestra: un proyecto, un repo, un resultado"></textarea></label>
+          </div>
+          <div class="row between">
+            <div class="row"><button class="btn primary" type="submit" id="sk-save">Guardar</button><button class="btn ghost" type="button" id="sk-cancel">Cancelar</button></div>
+            <button class="btn danger" type="button" id="sk-del" hidden>Quitar</button>
+          </div>
+          <div class="savestate" id="sk-msg"></div>
+        </form>
+      </div>
+      <div class="skcols" id="sk-cols"></div>
+    </section>
+
+    <section class="panel" id="p-repaso" hidden>
+      <div class="card stack">
+        <div class="row between"><h2>Entrenamiento</h2><div class="row" style="gap:6px"><span class="chip warn" id="r-due">0 por repasar hoy</span><span class="chip ok" id="r-done">0 repasadas hoy</span></div></div>
+        <p class="hint">Lees la pregunta, escribes tu respuesta de memoria como si se lo explicaras a alguien, la comparas con la correcta y te calificas. Lo que te cuesta vuelve pronto; lo que dominas, más adelante.</p>
+        <div class="steps" id="r-steps"></div>
+        <div class="practice" id="r-practice"></div>
+      </div>
+      <div class="grid2">
+        <div class="card stack" id="rf-card">
+          <h2 id="rf-title">Crear tarjeta</h2>
+          <p class="hint">Una tarjeta es una pregunta y la respuesta que deberías poder dar. Aquí solo la guardas; la contestas arriba, en Entrenamiento, cuando le toque.</p>
+          <form id="rf" class="stack">
+            <label class="field">Pregunta<textarea id="rf-front" required placeholder="¿Qué hace git rebase -i?"></textarea></label>
+            <label class="field">Respuesta<textarea id="rf-back" required placeholder="Reescribe commits: reordenar, unir y editar mensajes antes de compartirlos."></textarea></label>
+            <label class="field">Tema<input type="text" id="rf-topic" list="rf-topics" placeholder="Git"></label>
+            <datalist id="rf-topics"></datalist>
+            <div class="row"><button class="btn primary" type="submit" id="rf-save">Guardar tarjeta</button><button class="btn ghost" type="button" id="rf-cancel" hidden>Cancelar edición</button></div>
+          </form>
+          <div class="row" style="border-top:1px dashed var(--line);padding-top:10px">
+            <span class="hint" style="flex:1;min-width:180px">¿Sin ideas? Los agentes convierten lo que escribes en tu bitácora en tarjetas.</span>
+            <button class="btn" type="button" id="rf-gen">Generar con el Nexo</button>
+          </div>
+        </div>
+        <div class="card stack">
+          <div class="row between"><h2>Mazo</h2><span class="chip" id="r-total">0 tarjetas</span></div>
+          <div class="deck" id="r-deck"></div>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <!-- FINANZAS -->
+  <section class="group" id="g-finanzas" role="tabpanel" aria-labelledby="tab-finanzas" hidden style="--gc:var(--c5)">
+    <div class="ghead">
+      <div><h2>Finanzas</h2><p>Tus números claros. Finanzas protege tu colchón y opina en cada decisión personal.</p></div>
+      <button class="btn" type="button" id="money-toggle2">Ocultar cifras</button>
+    </div>
+
+    <section class="panel" id="p-finanzas" hidden>
+      <div class="tiles">
+        <div class="tile"><h3>Ahorro total</h3><div class="big" id="f-total">—</div><span class="muted" style="font-size:.78rem" id="f-total-s">en cuentas</span></div>
+        <div class="tile"><h3>Gasto mensual</h3><div class="big" id="f-exp">—</div><span class="muted" style="font-size:.78rem">gastos fijos</span></div>
+        <div class="tile"><h3>Ingreso confirmado</h3><div class="big" id="f-inc">—</div><span class="muted" style="font-size:.78rem" id="f-inc-s">al mes</span></div>
+        <div class="tile"><h3>Rendimiento estimado</h3><div class="big" id="f-yield">—</div><span class="muted" style="font-size:.78rem">al mes, según tasas</span></div>
+      </div>
+      <div class="card stack">
+        <div class="row between"><h3>Colchón</h3><span class="chip" id="f-runway-chip">—</span></div>
+        <div class="runway" aria-hidden="true"><i id="f-runway-bar" style="width:0%"></i><b id="f-runway-min" style="left:25%"></b></div>
+        <p class="hint" id="f-runway-txt">Meses que aguantas con tus ahorros si no entra nada. La línea roja marca 6 meses.</p>
+      </div>
+      <div class="card stack">
+        <div class="row between"><h2>Consultar una decisión</h2><span class="chip" style="color:var(--c5)">Finanzas lidera</span></div>
+        <p class="hint">Escribe una decisión que estés pensando: una compra, invertir, aceptar un trabajo, un gasto personal. Finanzas la evalúa con tus números, otro agente aporta su ángulo y el Nexo da un veredicto: Sí, No, Depende o Esperar. Lo ves en vivo en el mapa.</p>
+        <form id="dcf" class="stack">
+          <label class="field">La decisión<textarea id="dc-text" required placeholder="Ej. ¿Me conviene pagar un curso de 3,500 MXN o aprender con material gratuito?"></textarea></label>
+          <div class="row">
+            <label class="field" style="flex:1;min-width:150px">Monto involucrado (MXN, opcional)<input type="number" id="dc-amount" min="0" step="100" inputmode="decimal"></label>
+            <button class="btn primary" type="submit" style="align-self:end">Consultar al escuadrón</button>
+          </div>
+        </form>
+        <div class="stack" id="dc-list"></div>
+      </div>
+      <div class="card stack">
+        <div class="row between"><h2>Mis números</h2><span class="savestate" id="f-state"></span></div>
+        <p class="hint" id="f-hint">Edita y guarda. Finanzas y los demás agentes usan estos datos en cada misión. Montos en MXN.</p>
+        <h3>Cuentas y ahorros</h3>
+        <div class="frow h"><span>Cuenta</span><span>Monto</span><span>Rendimiento % anual</span><span></span><span></span></div>
+        <div class="stack" style="gap:6px" id="f-acc"></div>
+        <div><button class="btn ghost" type="button" data-add="accounts">+ Cuenta</button></div>
+        <h3 style="margin-top:8px">Gastos fijos</h3>
+        <div class="frow h"><span>Concepto</span><span>Monto</span><span>Frecuencia</span><span></span><span></span></div>
+        <div class="stack" style="gap:6px" id="f-exps"></div>
+        <div><button class="btn ghost" type="button" data-add="expenses">+ Gasto</button></div>
+        <h3 style="margin-top:8px">Ingresos</h3>
+        <div class="frow h"><span>Fuente</span><span>Monto</span><span>Frecuencia</span><span>Estado</span><span></span></div>
+        <div class="stack" style="gap:6px" id="f-incs"></div>
+        <div><button class="btn ghost" type="button" data-add="incomes">+ Ingreso</button></div>
+        <div class="row" style="margin-top:6px"><button class="btn primary" type="button" id="f-save">Guardar mis números</button></div>
+      </div>
+    </section>
+  </section>
+
+  <!-- SISTEMA Y MEJORA (engranaje) -->
+  <section class="group" id="g-sistema" role="tabpanel" aria-label="Sistema y mejora" hidden style="--gc:var(--c4)">
+    <div class="ghead">
+      <div><h2>Sistema y mejora</h2><p>Revisiones del escuadrón, tus solicitudes de mejora y cómo evoluciona el sistema.</p></div>
+      <div class="subnav"><button type="button" data-view="revisiones">Revisiones</button><button type="button" data-view="mejoras">Mejoras</button><button type="button" data-view="escuadron">Escuadrón</button><button type="button" data-view="ajustes">Ajustes</button></div>
+    </div>
+
+    <div class="forcebox">
+      <div class="row between"><h2>Revisión del escuadrón</h2><span class="chip" id="fz-last">Sin revisiones todavía</span></div>
+      <p class="hint">Todo el escuadrón revisa tu semana en vivo, reporta en el Nexo y la revisión queda guardada aquí. Hazla una vez por semana, por ejemplo cada domingo.</p>
+      <div class="row"><button class="btn primary" type="button" id="fz-quick">Correr revisión ahora</button></div>
+    </div>
+
+    <section class="panel" id="p-revisiones" hidden>
+      <div class="card review stack">
+        <div class="row between"><h2>Revisión semanal</h2><select id="w-review-pick" aria-label="Elegir revisión" style="width:auto"></select></div>
+        <div id="w-review-body"><p class="muted">Aún no hay revisiones. Corre la primera arriba.</p></div>
+      </div>
+    </section>
+
+    <section class="panel" id="p-mejoras" hidden>
+      <div class="card stack">
+        <h2>Tu meta</h2>
+        <p class="hint">Todos los agentes la usan para orientar sus consejos. Cámbiala cuando tu rumbo cambie.</p>
+        <textarea id="goal-text" style="min-height:70px"></textarea>
+        <div class="row"><button class="btn primary" type="button" id="goal-save">Guardar meta</button><span class="savestate" id="goal-state"></span></div>
+      </div>
+      <div class="card stack">
+        <h2>¿Qué necesita el sistema?</h2>
+        <p class="hint">Escribe una necesidad nueva, fricción o idea. Auditoría la atiende en la siguiente revisión y responde abajo.</p>
+        <form id="qf" class="stack">
+          <textarea id="qf-text" required placeholder="Ej. Quiero registrar cuántos ejercicios de Codewars hago por semana"></textarea>
+          <div class="row"><button class="btn primary" type="submit">Enviar al sistema</button></div>
+        </form>
+        <div class="stack" id="q-list"></div>
+      </div>
+      <div class="card stack"><h3>Bitácora de cambios</h3><div class="stack" id="s-log"><div class="empty">Sin cambios registrados.</div></div></div>
+    </section>
+
+    <section class="panel" id="p-escuadron" hidden>
+      <div class="card stack">
+        <h2>Departamentos</h2>
+        <p class="hint">Cada departamento es un agente con su sala en el Nexo. Para crear, fusionar o retirar uno, pídelo en Mejoras.</p>
+        <div class="roster" id="s-depts"><div class="empty">Cargando departamentos…</div></div>
+      </div>
+    </section>
+
+    <section class="panel" id="p-ajustes" hidden>
+      <div class="card stack">
+        <div class="row between"><h2>Conexión con Claude</h2><span class="chip" id="aj-keystate">—</span></div>
+        <p class="hint">Los agentes usan la API de Anthropic con tu propia API key. Se guarda solo en este navegador y las llamadas van directo de tu navegador a Anthropic. Consíguela en console.anthropic.com, sección API Keys, y ponle un límite de gasto.</p>
+        <label class="field">API key<input type="password" id="aj-key" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"></label>
+        <div class="grid2">
+          <label class="field">Modelo rápido (planeación y síntesis)<input type="text" id="aj-m-quick" spellcheck="false"></label>
+          <label class="field">Modelo normal (agentes)<input type="text" id="aj-m-default" spellcheck="false"></label>
+          <label class="field">Modelo complejo<input type="text" id="aj-m-complex" spellcheck="false"></label>
+        </div>
+        <div class="row"><button class="btn primary" type="button" id="aj-save">Guardar y recargar</button><button class="btn" type="button" id="aj-test">Probar conexión</button><span class="savestate" id="aj-state" aria-live="polite"></span></div>
+      </div>
+      <div class="card stack">
+        <h2>Quién eres</h2>
+        <p class="hint">Los agentes usan esto para aconsejarte con contexto. Solo se guarda en este navegador.</p>
+        <label class="field">Nombre o alias<input type="text" id="aj-owner" placeholder="Ej. Alex"></label>
+        <label class="field">Contexto<textarea id="aj-context" placeholder="Qué haces hoy, qué estás aprendiendo, con quién, qué te importa y qué quieres lograr."></textarea></label>
+        <div class="row"><button class="btn primary" type="button" id="aj-profile-save">Guardar</button><span class="savestate" id="aj-pstate" aria-live="polite"></span></div>
+      </div>
+      <div class="card stack">
+        <h2>Tus datos</h2>
+        <p class="hint">Todo vive en el almacenamiento de este navegador. Descarga respaldos para no perderlos o para pasarlos a otro equipo. No subas tus respaldos a un repositorio público.</p>
+        <div class="row">
+          <button class="btn" type="button" id="aj-export">Descargar respaldo</button>
+          <button class="btn" type="button" id="aj-import-btn">Importar respaldo</button>
+          <input type="file" id="aj-import" accept="application/json,.json" hidden>
+          <button class="btn danger" type="button" id="aj-reset">Borrar todo</button>
+        </div>
+        <div class="savestate" id="aj-dstate" aria-live="polite"></div>
+      </div>
+    </section>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script src="js/runtime.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

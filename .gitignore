@@ -1,0 +1,10 @@
+# Respaldos personales descargados desde Ajustes
+*respaldo*.json
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+.idea/
