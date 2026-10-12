@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="description" content="Centro de mando personal estilo videojuego con un escuadrón de agentes de IA.">
-<meta name="theme-color" content="#110F22">
+<meta name="theme-color" content="#060820">
 <title>Sistema KASANOV</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Crect width='16' height='16' fill='%23110F22'/%3E%3Cpath fill='%23FFE2A8' d='M7 1h2v2H7zM6 3h4v2H6z'/%3E%3Cpath fill='%23FFB547' d='M5 5h6v2H5zM4 7h8v2H4z'/%3E%3Cpath fill='%23C7802A' d='M5 9h6v2H5zM6 11h4v2H6zM7 13h2v2H7z'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Pixelify+Sans:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -43,35 +43,47 @@
       </div>
       <div class="card"><h3>Hoy</h3><div class="big" id="h-pts">0/3</div><span class="muted" style="font-size:.8rem" id="h-pts-s">puntos</span></div>
       <div class="card"><h3>Racha</h3><div class="big" id="h-streak">0</div><span class="muted" style="font-size:.8rem">días cumplidos seguidos</span></div>
-      <div class="card"><h3>Misión del día</h3><div id="h-quest" class="quest"><span class="muted" style="font-size:.85rem">Pide "Planear mi día" en la consola.</span></div></div>
+      <div class="card"><h3>Misión del día</h3><div id="h-quest" class="quest"><span class="muted" style="font-size:.85rem">Pulsa a Odín y pide "Planear mi día".</span></div></div>
     </div>
 
     <div class="base">
       <div class="stack" style="gap:8px">
         <div class="scene-wrap" id="scene-wrap">
-          <canvas id="scene" width="320" height="180" tabindex="0" aria-label="Mapa de la base: el Nexo al centro, pasillos y una sala por departamento. Haz clic en un agente para darle una orden directa."></canvas>
+          <canvas id="scene" width="320" height="180" tabindex="0" aria-label="Mapa de la base: Odín al centro, pasillos y una sala por departamento. Pulsa Enter o haz clic en Odín para coordinar, o en un agente para darle una orden directa."></canvas>
           <div class="overlay" id="overlay"></div>
+          <div class="mbar" id="mbar" hidden role="status"><span class="thinking"><i></i><i></i><i></i></span><span id="mbar-t">En misión</span><button class="btn danger" type="button" id="mbar-stop">Detener</button></div>
         </div>
-        <div class="muted" style="font-size:.8rem">Los agentes solo caminan por los pasillos. Haz clic en uno para darle una orden directa.</div>
+        <div class="muted" style="font-size:.8rem">Haz clic en Odín para coordinar o en un agente para darle una orden directa. Los agentes solo caminan por los pasillos.</div>
       </div>
+    </div>
 
-      <div class="card console">
-        <div class="row between"><h2>Consola del Nexo</h2><span class="chip" id="c-state">En espera</span></div>
-        <form id="cf" class="stack">
-          <label class="field">Destino
-            <select id="c-target"><option value="">Nexo decide y coordina</option></select>
-          </label>
-          <label class="field">Orden
-            <textarea id="c-text" required placeholder="Ej. Tengo 3 horas hoy y poca energía. ¿En qué avanzo de mi proyecto?"></textarea>
-          </label>
-          <div class="row">
-            <button class="btn primary" type="submit" id="c-run">Desplegar misión</button>
-            <button class="btn danger" type="button" id="c-stop" hidden>Detener</button>
-          </div>
-        </form>
-        <div class="stack" style="gap:6px">
-          <h3>Misiones rápidas</h3>
+    <div class="popback" id="console-back" hidden>
+      <div class="card console pop chatpop" id="console-pop" role="dialog" aria-modal="true" aria-labelledby="pop-title" data-who="odin">
+        <div class="pophead"><img id="pop-face" alt="" width="40" height="40"><div><h2 id="pop-title">Odín</h2><div class="muted" id="pop-sub" style="font-size:.8rem">Coordina al escuadrón</div></div><span class="chip" id="c-state">En espera</span><button class="popx" type="button" id="pop-close" aria-label="Cerrar">×</button></div>
+        <div class="ctabs" role="tablist" aria-label="Vista de la consola">
+          <button type="button" role="tab" id="ct-chat" aria-selected="true" aria-controls="cv-chat">Chat</button>
+          <button type="button" role="tab" id="ct-exp" aria-selected="false" aria-controls="cv-exp" tabindex="-1">Expediente <span class="chip warn" id="ct-n" hidden>0</span></button>
+        </div>
+        <div class="cview" id="cv-chat" role="tabpanel" aria-labelledby="ct-chat">
+          <div class="chatlog" id="chatlog" aria-live="polite"></div>
+          <form id="cf" class="stack cform">
+            <label class="field" hidden>Destino
+              <select id="c-target"><option value="">Nexo decide y coordina</option></select>
+            </label>
+            <label class="sr" for="c-text">Mensaje</label>
+            <textarea id="c-text" rows="2" placeholder="Escribe tu mensaje…"></textarea>
+            <div class="row">
+              <button class="btn primary" type="submit" id="c-send">Enviar</button>
+              <button class="btn odin-only" type="button" id="c-run">Desplegar misión</button>
+              <button class="btn odin-only" type="button" id="c-log">Registrar avance</button>
+              <button class="btn danger" type="button" id="c-stop" hidden>Detener</button>
+            </div>
+            <p class="hint" id="c-hint" style="margin:0"></p>
+          </form>
+          <details class="qd odin-only">
+            <summary>Misiones rápidas</summary>
           <div class="quick" id="quick">
+
             <button type="button" data-q="Con mis datos de hoy y de esta semana, define la misión del día y el foco. Que sea concreta y alcanzable.">Planear mi día</button>
             <button type="button" data-q="Con base en mis habilidades probadas y en práctica, mis proyectos y lo que disfruto construir, ¿qué caminos profesionales tienen más sentido para mí hoy? Compara 2 o 3 con pros y contras reales y propone un experimento pequeño para probar el más prometedor esta semana.">¿Cuál es mi camino?</button>
             <button type="button" data-q="Propón el siguiente proyecto personal que pueda construir con vibe coding y mis habilidades reales, que me haga crecer y sirva para mostrar en mi portafolio, y el primer paso para hoy.">Siguiente proyecto</button>
@@ -80,9 +92,20 @@
             <button type="button" data-q="Revisa cómo estoy usando el sistema esta semana y qué fricción conviene quitar.">Auditar sistema</button>
             <button type="button" data-q="Reunión general: cada departamento reporta el estado de su área y entre todos definen las 3 prioridades de la semana." data-all="1">Reunión general</button>
           </div>
+          </details>
+          <div id="c-msg" class="muted" style="font-size:.85rem"></div>
         </div>
-        <div id="c-msg" class="muted" style="font-size:.85rem"></div>
+        <div class="cview stack" id="cv-exp" role="tabpanel" aria-labelledby="ct-exp" hidden>
+          <div id="ex-knows" class="stack" style="gap:8px"></div>
+          <form class="row exadd" id="ex-add"><input type="text" id="ex-fact" maxlength="160" placeholder="Agrega algo que deba saber de ti" aria-label="Agregar un dato al expediente"><button class="btn" type="submit">Agregar</button></form>
+          <div id="ex-recs" class="stack" style="gap:8px"></div>
+        </div>
       </div>
+    </div>
+
+    <div class="card stack board" id="board-card">
+      <div class="row between"><h2>Tablero de estado</h2><span class="chip" id="b-when">Vacío</span></div>
+      <div id="b-body"></div>
     </div>
 
     <div class="commsgrid">
@@ -120,51 +143,73 @@
         </div>
         <button class="btn ghost" id="d-today">Ir a hoy</button>
       </div>
-      <div class="grid2">
-        <div class="card stack">
-          <div class="row between"><h3>Puntos del día</h3><span class="chip" id="d-status">—</span></div>
-          <div class="score"><b id="d-points">0</b><span class="muted" id="d-min">/ — mínimo</span></div>
-          <p class="hint">El día cuenta con el mínimo de puntos y al menos un hábito prioritario.</p>
-          <div class="row"><span class="chip" id="d-streak">Racha: 0 días</span><span class="chip" id="d-bonus">Bonus: 0</span></div>
-        </div>
-        <div class="card stack">
-          <h3>Sesión de estudio</h3>
-          <div class="row">
-            <label class="field" style="flex:1;min-width:120px">Minutos estudiados
-              <input type="number" id="d-min-input" min="0" step="5" inputmode="numeric" placeholder="0">
-            </label>
-            <div class="stack" style="gap:4px">
-              <span class="muted" style="font-size:.85rem">Pomodoros</span>
-              <div class="row" style="gap:6px"><button class="btn" id="pomo-add">+25</button><button class="btn" id="pomo-add50">+50</button></div>
+      <div class="card stack">
+        <div class="row between"><h3>Puntos del día</h3><span class="chip" id="d-status">—</span></div>
+        <div class="score"><b id="d-points">0</b><span class="muted" id="d-min">/ — mínimo</span></div>
+        <p class="hint" id="d-hint">El día cuenta con el mínimo de puntos y al menos un hábito prioritario.</p>
+        <div class="row"><span class="chip" id="d-streak">Racha: 0 días</span><span class="chip" id="d-bonus">Bonus: 0</span></div>
+      </div>
+      <section class="card fold" id="f-act">
+        <h3 class="fold-hh"><button type="button" class="fold-h" id="f-act-h" aria-expanded="true" aria-controls="f-act-b"><span class="fold-n">Actividades del día</span><span class="fold-s" id="f-act-s"></span></button></h3>
+        <div class="fold-b stack" id="f-act-b">
+          <h4 class="sub">Hábitos</h4>
+          <div class="checks" id="d-habits"><div class="empty">Tus hábitos aparecen aquí en cuanto cargue la configuración.</div></div>
+          <h4 class="sub">Bonus <span class="muted" id="d-bonus-rule" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h4>
+          <div class="checks" id="d-bonuses"></div>
+          <div class="grid2">
+            <div class="stack" style="gap:8px">
+              <h4 class="sub">Estudio</h4>
+              <div class="row">
+                <label class="field" style="flex:1;min-width:120px">Minutos estudiados
+                  <input type="number" id="d-min-input" min="0" step="5" inputmode="numeric" placeholder="0">
+                </label>
+                <div class="stack" style="gap:4px">
+                  <span class="muted" style="font-size:.85rem">Pomodoros</span>
+                  <div class="row" style="gap:6px"><button type="button" class="btn" id="pomo-add">+25</button><button type="button" class="btn" id="pomo-add50">+50</button></div>
+                </div>
+              </div>
+              <div class="muted" style="font-size:.85rem" id="d-study-target"></div>
+            </div>
+            <div class="stack" style="gap:8px">
+              <h4 class="sub">Energía <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">(1 baja · 5 alta)</span></h4>
+              <div class="energy" id="d-energy" role="group" aria-label="Energía"></div>
             </div>
           </div>
-          <div class="muted" style="font-size:.85rem" id="d-study-target"></div>
-          <div class="stack" style="gap:4px">
-            <span class="muted" style="font-size:.85rem">Energía (1 baja · 5 alta)</span>
-            <div class="energy" id="d-energy" role="group" aria-label="Energía"></div>
+          <div class="row fold-f"><button type="button" class="btn" id="f-act-save">Guardar</button><span class="savestate" id="f-act-st" aria-live="polite"></span></div>
+        </div>
+      </section>
+      <section class="card fold" id="f-log">
+        <h3 class="fold-hh"><button type="button" class="fold-h" id="f-log-h" aria-expanded="true" aria-controls="f-log-b"><span class="fold-n">Bitácora</span><span class="fold-s" id="f-log-s"></span></button></h3>
+        <div class="fold-b stack" id="f-log-b">
+          <p class="hint" style="margin:0">Cinco líneas cortas; los agentes las leen como evidencia. Etiqueta cada una con un proyecto o tema que ya existe. Solo «Siguiente» es obligatorio, y únicamente para cerrar el día.</p>
+          <div class="ghask stack" id="gh-ask" hidden></div>
+          <div class="lgrid" id="lg">
+            <div class="lgf" data-f="hice"><div class="lgh"><label for="d-hice">Hice</label><select id="t-hice" data-tag="hice" aria-label="Proyecto o tema de «Hice»"></select></div>
+              <textarea id="d-hice" rows="2" maxlength="900" placeholder="Ej. Armé el formulario de contacto"></textarea></div>
+            <div class="lgf" data-f="aprendi"><div class="lgh"><label for="d-aprendi">Aprendí</label><select id="t-aprendi" data-tag="aprendi" aria-label="Proyecto o tema de «Aprendí»"></select></div>
+              <textarea id="d-aprendi" rows="2" maxlength="400" placeholder="Ej. Cómo se conecta la app con la base de datos"></textarea></div>
+            <div class="lgf" data-f="trabe"><div class="lgh"><label for="d-trabe">Me trabé</label><select id="t-trabe" data-tag="trabe" aria-label="Proyecto o tema de «Me trabé»"></select></div>
+              <textarea id="d-trabe" rows="2" maxlength="400" placeholder="Ej. No entiendo cómo se despliega la app"></textarea></div>
+            <div class="lgf" data-f="decidi"><div class="lgh"><label for="d-decidi">Decidí</label><select id="t-decidi" data-tag="decidi" aria-label="Proyecto o tema de «Decidí»"></select></div>
+              <textarea id="d-decidi" rows="2" maxlength="400" placeholder="Ej. Usar SQLite por ahora y migrar después"></textarea></div>
+            <div class="lgf" data-f="siguiente"><div class="lgh"><label for="d-siguiente">Siguiente <span class="req">obligatorio para cerrar el día</span></label><select id="t-siguiente" data-tag="siguiente" aria-label="Proyecto o tema de «Siguiente»"></select></div>
+              <textarea id="d-siguiente" rows="2" maxlength="400" placeholder="Ej. Conectar el formulario y probarlo"></textarea></div>
           </div>
+          <div class="qout" id="qo" hidden>
+            <div class="row between"><h4 class="sub">Misión del día</h4><span class="chip" id="qo-chip">Sin marcar</span></div>
+            <div class="qt" id="qo-t"></div>
+            <div class="seg" id="qo-st" role="group" aria-label="¿Cómo te fue con la misión del día?"><button type="button" data-o="cumplida" aria-pressed="false">Cumplida</button><button type="button" data-o="parcial" aria-pressed="false">Parcial</button><button type="button" data-o="no" aria-pressed="false">No cumplida</button></div>
+            <div class="qwhy" id="qo-r" hidden><span class="muted" style="font-size:.82rem">Motivo rápido:</span><div class="seg" role="group" aria-label="Motivo"><button type="button" data-why="tiempo" aria-pressed="false">Falta de tiempo</button><button type="button" data-why="energia" aria-pressed="false">Falta de energía</button><button type="button" data-why="prioridad" aria-pressed="false">No era prioridad</button><button type="button" data-why="como" aria-pressed="false">No supe cómo</button></div></div>
+          </div>
+          <div class="inbox" id="inbox" hidden>
+            <div class="row between"><h4 class="sub">Bandeja sin clasificar</h4><span class="chip" id="inbox-n">0</span></div>
+            <p class="hint" style="margin:0">Notas rápidas que dejaste durante el día. Mueve cada una a uno de los cinco campos (se agrega al texto) o descártala.</p>
+            <div class="stack" id="inbox-list" style="gap:8px"></div>
+          </div>
+          <div class="row fold-f"><button type="button" class="btn" id="f-log-save">Guardar</button><button type="button" class="btn" id="f-log-close">Cerrar el día</button><span class="savestate" id="f-log-st" aria-live="polite"></span></div>
+          <div class="savestate closemsg" id="f-log-cm" aria-live="polite"></div>
         </div>
-      </div>
-      <div class="card stack">
-        <h3>Hábitos</h3>
-        <div class="checks" id="d-habits"><div class="empty">Tus hábitos aparecen aquí en cuanto cargue la configuración.</div></div>
-        <h3 style="margin-top:6px">Bonus <span class="muted" id="d-bonus-rule" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h3>
-        <div class="checks" id="d-bonuses"></div>
-      </div>
-      <div class="card stack">
-        <h3>Bitácora</h3>
-        <div class="grid2">
-          <label class="field">Qué hice o aprendí hoy (los agentes lo usan como evidencia)
-            <textarea id="d-learned" placeholder="Ej. Armé un formulario con validación usando Claude Code y entendí cómo se conecta con la base de datos"></textarea></label>
-          <label class="field">Dónde me trabé
-            <textarea id="d-blocked" placeholder="Ej. No entiendo bien cómo se despliega una app en Vercel"></textarea></label>
-          <label class="field">Victoria del día
-            <textarea id="d-win" placeholder="Algo concreto que salió bien, aunque sea pequeño"></textarea></label>
-          <label class="field">Notas libres
-            <textarea id="d-notes" placeholder="Contexto, ánimo, ideas, qué disfruté"></textarea></label>
-        </div>
-        <div class="savestate" id="d-save" aria-live="polite"></div>
-      </div>
+      </section>
     </section>
 
     <section class="panel" id="p-semana" hidden>
@@ -240,7 +285,21 @@
     <section class="panel" id="p-repaso" hidden>
       <div class="card stack">
         <div class="row between"><h2>Entrenamiento</h2><div class="row" style="gap:6px"><span class="chip warn" id="r-due">0 por repasar hoy</span><span class="chip ok" id="r-done">0 repasadas hoy</span></div></div>
-        <p class="hint">Lees la pregunta, escribes tu respuesta de memoria como si se lo explicaras a alguien, la comparas con la correcta y te calificas. Lo que te cuesta vuelve pronto; lo que dominas, más adelante.</p>
+        <p class="hint" style="font-size:.95rem">Para que lo que aprendes <strong>no se te olvide</strong> y puedas explicarlo con tus palabras. Son unos minutos al día.</p>
+        <details class="why" id="r-why">
+          <summary>¿Para qué sirve y cómo funciona?</summary>
+          <div class="whybody">
+            <p><strong>El problema:</strong> lo que ves en tus proyectos (un comando de git, cómo se conecta una app con su base de datos) se borra de la memoria en pocos días si no lo vuelves a usar.</p>
+            <p><strong>La solución:</strong> Entrenamiento te lo pregunta justo cuando estás por olvidarlo. Así lo dominas de verdad y puedes defenderlo solo: en un proyecto, con un cliente o en una entrevista.</p>
+            <ol>
+              <li><strong>Una tarjeta</strong> es una pregunta con su respuesta. Tú las creas, o el Nexo las saca de lo que escribes en tu bitácora.</li>
+              <li><strong>Cada día</strong> aparecen aquí solo las que te tocan hoy (arriba ves cuántas). Si no hay ninguna, no tienes nada que hacer.</li>
+              <li><strong>Respondes de memoria</strong>, ves la respuesta correcta y te calificas con honestidad.</li>
+              <li><strong>Si te costó</strong>, la tarjeta vuelve mañana; <strong>si ya la dominas</strong>, vuelve en varios días.</li>
+            </ol>
+            <div class="exa"><span>Ejemplo de tarjeta</span><b>¿Qué hace git rebase -i?</b><em>Reescribe commits: reordenar, unir y editar mensajes antes de compartirlos.</em></div>
+          </div>
+        </details>
         <div class="steps" id="r-steps"></div>
         <div class="practice" id="r-practice"></div>
       </div>
@@ -350,7 +409,7 @@
         <h2>¿Qué necesita el sistema?</h2>
         <p class="hint">Escribe una necesidad nueva, fricción o idea. Auditoría la atiende en la siguiente revisión y responde abajo.</p>
         <form id="qf" class="stack">
-          <textarea id="qf-text" required placeholder="Ej. Quiero registrar cuántos ejercicios de Codewars hago por semana"></textarea>
+          <textarea id="qf-text" required placeholder="Ej. Quiero ver cuántas horas estudio por tema cada semana"></textarea>
           <div class="row"><button class="btn primary" type="submit">Enviar al sistema</button></div>
         </form>
         <div class="stack" id="q-list"></div>
@@ -365,16 +424,15 @@
         <div class="roster" id="s-depts"><div class="empty">Cargando departamentos…</div></div>
       </div>
     </section>
-
     <section class="panel" id="p-ajustes" hidden>
-      <div class="card stack">
+            <div class="card stack">
         <div class="row between"><h2>Conexión con Claude</h2><span class="chip" id="aj-keystate">—</span></div>
         <p class="hint">Los agentes usan la API de Anthropic con tu propia API key. Se guarda solo en este navegador y las llamadas van directo de tu navegador a Anthropic. Consíguela en console.anthropic.com, sección API Keys, y ponle un límite de gasto.</p>
         <label class="field">API key<input type="password" id="aj-key" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"></label>
         <div class="grid2">
-          <label class="field">Modelo rápido (planeación y síntesis)<input type="text" id="aj-m-quick" spellcheck="false"></label>
-          <label class="field">Modelo normal (agentes)<input type="text" id="aj-m-default" spellcheck="false"></label>
-          <label class="field">Modelo complejo<input type="text" id="aj-m-complex" spellcheck="false"></label>
+          <label class="field">Modelo rápido (resúmenes rodantes, autorrevisión y planeación)<input type="text" id="aj-m-quick" spellcheck="false"></label>
+          <label class="field">Modelo normal (agentes y chats)<input type="text" id="aj-m-default" spellcheck="false"></label>
+          <label class="field">Modelo complejo (síntesis de Odín y revisión semanal)<input type="text" id="aj-m-complex" spellcheck="false"></label>
         </div>
         <div class="row"><button class="btn primary" type="button" id="aj-save">Guardar y recargar</button><button class="btn" type="button" id="aj-test">Probar conexión</button><span class="savestate" id="aj-state" aria-live="polite"></span></div>
       </div>
@@ -396,8 +454,52 @@
         </div>
         <div class="savestate" id="aj-dstate" aria-live="polite"></div>
       </div>
+      <div class="card stack" id="perfil">
+        <div class="row between"><h2>Perfil del comandante</h2><span class="chip" id="pf-state">—</span></div>
+        <p class="hint">Lo reciben todos los agentes y Odín en cada chat y en cada misión, para que no te traten como a un usuario cualquiera. Escribe corto; en las listas, una idea por línea.</p>
+        <div class="grid2">
+          <label class="field">Meta principal<textarea id="pf-goal" rows="2"></textarea></label>
+          <label class="field">Fecha objetivo<input type="date" id="pf-date"></label>
+        </div>
+        <h4 class="sub">Restricciones reales</h4>
+        <div class="grid2">
+          <label class="field">Horas disponibles<input type="text" id="pf-hours" placeholder="Ej. 3 h entre semana y 5 h el sábado"></label>
+          <label class="field">Dinero<input type="text" id="pf-money" placeholder="Ej. máximo 500 MXN al mes en cursos"></label>
+        </div>
+        <label class="field">Compromisos fijos<textarea id="pf-commit" rows="2" placeholder="Ej. comida familiar los domingos"></textarea></label>
+        <h4 class="sub">Cómo aprendo</h4>
+        <div class="grid2">
+          <label class="field">Aprendo mejor cuando…<textarea id="pf-learn" rows="2" placeholder="Ej. construyo algo real y lo explico en voz alta"></textarea></label>
+          <label class="field">No me funciona…<textarea id="pf-nolearn" rows="2" placeholder="Ej. videos largos sin practicar"></textarea></label>
+        </div>
+        <label class="field">Mis patrones conocidos (uno por línea)<textarea id="pf-patterns" rows="3" placeholder="Ej. pospongo lo que no tiene fecha&#10;Ej. rindo más en la mañana"></textarea></label>
+        <label class="field">Lo que NO quiero que me recomienden (uno por línea)<textarea id="pf-avoid" rows="3" placeholder="Ej. dejar el gym para estudiar más"></textarea></label>
+        <div class="row"><button class="btn primary" type="button" id="pf-save">Guardar perfil</button><span class="savestate" id="pf-st" aria-live="polite"></span></div>
+      </div>
+      <div class="card stack" id="gh-card">
+        <div class="row between"><h2>GitHub: señales automáticas</h2><span class="chip" id="gh-state">Sin conectar</span></div>
+        <p class="hint">Con tu usuario, el sistema consulta una vez al día tu actividad pública de GitHub (sin token): repo, fecha y mensaje de tus commits recientes. Los agentes lo ven como SEÑALES aunque no lo anotes. Si la consulta falla, todo sigue funcionando sin esos datos.</p>
+        <label class="field">Usuario de GitHub<input type="text" id="gh-user" placeholder="tu-usuario" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <div class="row"><button class="btn primary" type="button" id="gh-save">Guardar y consultar</button><button class="btn" type="button" id="gh-refresh">Actualizar ahora</button><span class="savestate" id="gh-st" aria-live="polite"></span></div>
+        <div id="gh-sum" class="stack" style="gap:8px"></div>
+      </div>
+      <div class="card stack">
+        <div class="row between"><h2>Patrones propuestos por los agentes</h2><span class="chip" id="pf-pn">0</span></div>
+        <p class="hint">Cuando un agente detecta en tus datos algo que se repite, lo propone aquí con su evidencia. Solo entra a tu perfil si lo apruebas.</p>
+        <div class="stack" id="pf-pending"></div>
+      </div>
     </section>
   </section>
+</div>
+<button class="fab" id="qn-fab" type="button" aria-label="Nota rápida"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="fab-l">Nota rápida</span><b class="fab-n" id="qn-badge" hidden>0</b></button>
+<div class="popback" id="qn-back" hidden>
+  <div class="card pop qn" id="qn-pop" role="dialog" aria-modal="true" aria-labelledby="qn-title">
+    <div class="qnhead"><h2 id="qn-title">Nota rápida</h2><button class="popx" type="button" id="qn-close" aria-label="Cerrar">×</button></div>
+    <form id="qn-form" class="stack">
+      <textarea id="qn-text" required maxlength="1000" placeholder="Lo que sea, sin clasificar. Lo ordenas al cerrar el día."></textarea>
+      <div class="row between"><button class="btn primary" type="submit">Guardar en la Bandeja</button><span class="savestate" id="qn-st" aria-live="polite"></span></div>
+    </form>
+  </div>
 </div>
 <div class="toast" id="toast" hidden></div>
 <script src="js/runtime.js"></script>

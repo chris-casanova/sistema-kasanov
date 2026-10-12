@@ -20,7 +20,7 @@
   const API_URL = "https://api.anthropic.com/v1/messages";
   // Modelos por defecto. Si alguno deja de existir, cámbialo en Ajustes por uno vigente:
   // https://docs.claude.com/en/docs/about-claude/models/overview
-  const DEFAULT_MODELS = { quick: "claude-haiku-4-5-20251001", default: "claude-sonnet-5-5", complex: "claude-opus-5-5" };
+  const DEFAULT_MODELS = { quick: "claude-haiku-5-5", default: "claude-sonnet-5-5", complex: "claude-opus-5-5" };
   const MAX_TOKENS = { quick: 1500, default: 3000, complex: 4000 };
 
   const clone = (o) => JSON.parse(JSON.stringify(o));
