@@ -28,6 +28,7 @@ const gn=d=>(d&&(d.god||d.name))||"";
 
 const S={config:null,days:{},projects:[],cards:[],reviews:[],requests:[],changelog:[],missions:[],quests:{},inbox:[],skills:[],fin:null,decisions:[],forced:null,live:null,chats:{},dossiers:{},board:null,profile:null,signals:null};
 let db=null,sample=null,sampleOff=false,mcp=null;let cur=today();
+let AVCMD=null; /* avatar elegido, visible en el comandante del mapa (solo se guarda en este navegador) */
 
 /* ---------- ocultar cifras de dinero ---------- */
 let HIDE=false;try{HIDE=localStorage.getItem("hide$")==="1"}catch(e){}
@@ -46,7 +47,7 @@ function setHide(v){HIDE=v;try{localStorage.setItem("hide$",v?"1":"0")}catch(e){
 $("money-toggle").onclick=()=>setHide(!HIDE);$("money-toggle2").onclick=()=>setHide(!HIDE);
 
 /* ---------- navegación por áreas ---------- */
-const GROUPS={nexo:["nexo"],personal:["hoy","semana","habitos"],trabajo:["proyectos","habilidades","repaso"],finanzas:["finanzas"],sistema:["revisiones","mejoras","escuadron","ajustes"]};
+const GROUPS={nexo:["nexo"],personal:["hoy","semana"],trabajo:["proyectos","habilidades","repaso"],finanzas:["finanzas"],sistema:["revisiones","mejoras","escuadron","ajustes"]};
 const ALLV=Object.values(GROUPS).flat();
 const groupOf=v=>Object.keys(GROUPS).find(g=>GROUPS[g].includes(v))||"nexo";
 const tabs=[...document.querySelectorAll("nav.tabs button")];
@@ -497,7 +498,8 @@ FIG.cmd=function(a,x,y,t,o){
   P(x-2,y-4,2,4-st,"#2A2540");P(x+1,y-4,2,o.walking?3+st:4,"#2A2540");
   P(x-3,y-13,7,7,"#5B4FD0");P(x-3,y-13,7,1,"#E5B84B");P(x-3,y-8,7,1,"#E5B84B");P(x-5,y-12,2,5,"#5B4FD0");P(x+4,y-12,2,5,"#5B4FD0");P(x-5,y-7,1,1,L.skin);P(x+5,y-7,1,1,L.skin);
   P(x-3,y-20,7,6,L.skin);P(x-3,y-21,7,2,L.hair);P(x-4,y-19,1,3,L.hair);P(x+4,y-19,1,3,L.hair);
-  P(x-4,y-22,9,1,"#E5B84B");P(x-3,y-23,1,1,"#E5B84B");P(x,y-23,1,1,"#FFE9A6");P(x+3,y-23,1,1,"#E5B84B");
+  P(x-4,y-22,9,1,"#E5B84B");P(x-3,y-23,1,1,"#E5B84B");P(x,y-23,1,1,AVCMD?AVCMD.acc:"#FFE9A6");P(x+3,y-23,1,1,"#E5B84B");
+  if(AVCMD&&AVCMD.emb){const e=AVCMD.emb;P(x-3,y-13,7,7,"#E5B84B");for(let r=0;r<5;r++)for(let c=0;c<5;c++)P(x-2+c,y-12+r,1,1,e[r*5+c])}
   const ex=d>0?0:-1;if(!o.blink){P(x-2+ex,y-18,1,1,INK);P(x+2+ex,y-18,1,1,INK)}mouthAt(x-1,y-16,o,3);
 };
 
@@ -1328,7 +1330,7 @@ function profileText(){const p=profOf(),o=[];const ln=(k,v)=>{v=String(v||"").re
   if(p.patterns.length)o.push("- Patrones conocidos: "+p.patterns.join("; "));
   if(p.avoid.length)o.push("- NO quiere que le recomienden: "+p.avoid.join("; ")+". Si una idea cae aquí, descártala.");
   return "\n\nPERFIL DEL COMANDANTE (lo escribió él; respétalo en todo lo que digas):\n"+(o.length?o.join("\n"):"- Aún vacío.")}
-const BASEP=()=>BASE_()+profileText();
+const BASEP=()=>BASE_()+profileText()+prefsText();
 function putProfile(p){p.updated=nowISO();return putDoc("profile/main",p)}
 /* un agente puede PROPONER un patrón; solo se guarda en el perfil si lo apruebas */
 function proposePattern(pt,by,src){if(!pt||typeof pt!=="object")return false;const t=short(pt.texto||pt.text,120),ev=short(pt.evidencia||pt.evidence,200);
@@ -1547,7 +1549,7 @@ async function chatSend(id,text){
     const reply=short(r&&r.reply,1400)||"…";
     threadPush(id,{r:"u",k:"chat",t:text.slice(0,1500)},{r:"a",k:"chat",t:reply});
     dossierAdd(id,{facts:r&&r.sobre_ti,rec:id==="nexo"?null:r&&r.recomendacion,src,reqEv:true,from:"chat"});
-    if(id!=="nexo"&&r&&r.patron&&proposePattern(r.patron,id,src))toast(nameOf(id)+" propone un patrón para tu perfil (Ajustes)");
+    if(id!=="nexo"&&r&&r.patron&&proposePattern(r.patron,id,src))toast(nameOf(id)+" propone un patrón para tu perfil (ficha del comandante)");
     if(a){bubble(a,mm(short(reply,90)),4200);a.emote={k:"♪",until:performance.now()+1500}}
     delete CHATPEND[id];return true}
   catch(e){if(e&&["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(e.code))sampleOff=true;
@@ -1658,33 +1660,97 @@ function renderBoard(){const b=S.board,el=$("b-body"),wh=$("b-when");let h;
 $("b-body").addEventListener("click",e=>{if(!e.target.closest("button[data-bq]"))return;const b=document.querySelector("#quick button[data-q]");if(b)runMission(b.dataset.q,"",false)});
 
 
-/* ---------- SEÑALES: actividad pública de GitHub (sin token, una vez al día; si falla, todo sigue igual) ---------- */
-const GH_TTL=20*3600e3;let GH={state:"",msg:""},GH_AUTO=false;
-const ghUser=()=>String(profOf().github||"").trim().replace(/^@/,"").replace(/^https?:\/\/(www\.)?github\.com\//i,"").split(/[\/?#\s]/)[0];
+/* ---------- SEÑALES: actividad pública de GitHub (sin token; como máximo una consulta por hora; si falla, te dice exactamente por qué y todo sigue igual) ---------- */
+const GH_TTL=3600e3,GH_LS="kasanov:gh:v1";let GH={state:"",msg:"",err:null,via:"",warn:"",test:null},GH_AUTO=false,GH_CSP=null;
+try{document.addEventListener("securitypolicyviolation",e=>{if(/github/i.test(String(e.blockedURI||"")))GH_CSP={dir:e.effectiveDirective||e.violatedDirective||"connect-src",uri:String(e.blockedURI||"")}})}catch(e){}
+const ghClean=s=>String(s||"").trim().replace(/^@/,"").replace(/^https?:\/\/(www\.)?github\.com\//i,"").split(/[\/?#]/)[0].trim();
+const ghUser=()=>ghClean(profOf().github);
+const ghValid=u=>/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/.test(u);
 const ghNorm=u=>String(u||"").toLowerCase().replace(/^https?:\/\/(www\.)?/,"").replace(/\.git$/,"").replace(/\/+$/,"");
-async function ghGet(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);
-  try{const r=await fetch(url,{headers:{Accept:"application/vnd.github+json"},signal:c.signal});if(!r.ok)throw{status:r.status};return await r.json()}finally{clearTimeout(t)}}
+const ghOwn=(full,u)=>String(full||"").toLowerCase().startsWith(String(u||"").toLowerCase()+"/");
+const hm=ms=>{const d=new Date(ms);return pad(d.getHours())+":"+pad(d.getMinutes())};
+const GH_ENV=["csp","network","offline"];
+function ghMem(){try{return JSON.parse(localStorage.getItem(GH_LS)||"{}")||{}}catch(e){return{}}}
+function ghMemSet(o){try{localStorage.setItem(GH_LS,JSON.stringify(Object.assign(ghMem(),o)))}catch(e){}}
+/* errores con causa exacta: cada uno trae msg (qué pasó, en claro) y detail (dato técnico tal cual) */
+async function ghNetErr(e,url){await sleep(40);
+  const det=((e&&e.name)||"Error")+": "+((e&&e.message)||"sin mensaje")+" · GET "+url;
+  if(e&&e.name==="AbortError")return{kind:"timeout",msg:"GitHub no respondió en 12 segundos (tiempo agotado). Puede ser tu conexión o que GitHub esté lento.",detail:det};
+  if(GH_CSP)return{kind:"csp",msg:"Bloqueado en este entorno: la política de seguridad de la página ("+GH_CSP.dir+") no deja conectarse a api.github.com. No es un problema de tu usuario ni de GitHub: aquí no se puede leer GitHub.",detail:det+" · bloqueado: "+GH_CSP.uri};
+  if(typeof navigator!=="undefined"&&navigator.onLine===false)return{kind:"offline",msg:"Sin conexión a internet. Revisa tu red y vuelve a probar.",detail:det};
+  return{kind:"network",msg:"El navegador no pudo conectar con api.github.com: no llegó ninguna respuesta. Es un bloqueo de red o de permisos de la página (firewall, proxy, extensión, o un entorno que no permite salir a internet), no un error de tu usuario.",detail:det}}
+function ghHttpErr(st,body,meta,url,ctx){ctx=ctx||{};const msg=body&&body.message?String(body.message):"";
+  const det="HTTP "+st+(msg?" «"+msg+"»":"")+" · GET "+url+(meta.remaining!=null?" · consultas restantes "+meta.remaining+"/"+(meta.limit==null?"?":meta.limit):"");
+  if(st===404)return ctx.repo?{kind:"repo404",status:st,msg:"GitHub respondió 404 para el repo «"+ctx.repo+"»: no existe, cambió de nombre o ya no es público.",detail:det}:{kind:"notfound",status:st,msg:"GitHub respondió 404: el usuario «"+(ctx.user||"")+"» no existe. Revisa que esté bien escrito (sin @ ni espacios).",detail:det};
+  if(st===403||st===429){
+    if(meta.remaining===0||/rate limit|abuse|secondary/i.test(msg)){const until=meta.reset||0;return{kind:"ratelimit",status:st,until,msg:"GitHub agotó el límite de consultas sin token (60 por hora por conexión)"+(until?"; se libera a las "+hm(until):"")+". Mientras tanto se usan los datos guardados.",detail:det}}
+    return{kind:"forbidden",status:st,msg:"GitHub rechazó la consulta (HTTP "+st+")"+(msg?": «"+msg+"»":"")+". Puede ser un bloqueo de tu red o de permisos.",detail:det}}
+  if(st===401)return{kind:"auth",status:st,msg:"GitHub pide credenciales para esta consulta (HTTP 401). El sistema solo usa datos públicos, sin token.",detail:det};
+  if(st===451)return{kind:"legal",status:st,msg:"GitHub no puede mostrar este recurso por motivos legales (HTTP 451).",detail:det};
+  if(st>=500)return{kind:"server",status:st,msg:"GitHub tuvo un error temporal (HTTP "+st+"). Intenta de nuevo más tarde.",detail:det};
+  return{kind:"http",status:st,msg:"GitHub respondió HTTP "+st+(msg?": «"+msg+"»":"")+".",detail:det}}
+const ghAsErr=e=>e&&e.kind?e:{kind:"unknown",msg:"Error inesperado: "+((e&&e.message)||String(e)),detail:String((e&&e.stack)||e)};
+async function ghGet(url,ctx){GH_CSP=null;const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);let r;
+  try{r=await fetch(url,{headers:{Accept:"application/vnd.github+json"},signal:c.signal,cache:"no-store"})}catch(e){clearTimeout(t);throw await ghNetErr(e,url)}
+  const rh=n=>{try{return r.headers.get(n)}catch(e){return null}},rem=rh("x-ratelimit-remaining"),rs=rh("x-ratelimit-reset"),lm=rh("x-ratelimit-limit");
+  const meta={remaining:rem==null?null:+rem,limit:lm==null?null:+lm,reset:rs?+rs*1000:0};let body=null,bad=false;
+  try{body=await r.json()}catch(e){bad=true}finally{clearTimeout(t)}
+  if(!r.ok)throw ghHttpErr(r.status,body,meta,url,ctx);
+  if(bad)throw{kind:"format",msg:"GitHub respondió, pero no con datos legibles (no es JSON).",detail:"HTTP "+r.status+" · GET "+url};
+  return{data:body,meta}}
+/* consulta completa: repos por último push + eventos públicos; si los eventos vienen vacíos, commits de los 3 repos más recientes */
 async function ghFetch(force){
-  const u=ghUser();if(!u||GH.state==="loading")return false;const prev=S.signals||{};
-  if(!force&&prev.user===u&&prev.fetchedAt&&Date.now()-Date.parse(prev.fetchedAt)<GH_TTL)return false;
-  GH={state:"loading",msg:"Consultando GitHub…"};renderGh();
-  try{const since=new Date(Date.now()-21*864e5).toISOString();
-    const all=await ghGet("https://api.github.com/users/"+encodeURIComponent(u)+"/repos?sort=pushed&per_page=15");
-    if(!Array.isArray(all))throw{status:"formato"};
-    const repos=all.filter(x=>!x.fork&&String(x.pushed_at||"")>=since).slice(0,6).map(x=>({name:x.name,full:x.full_name,url:x.html_url,pushedAt:x.pushed_at}));
-    const commits=[];
-    for(const rp of repos){try{const cs=await ghGet("https://api.github.com/repos/"+rp.full+"/commits?per_page=30&since="+encodeURIComponent(since));
-      (Array.isArray(cs)?cs:[]).forEach(c=>{const cm=c.commit||{};commits.push({repo:rp.name,date:(cm.author&&cm.author.date)||(cm.committer&&cm.committer.date)||"",msg:short(String(cm.message||"").split("\n")[0],140)})})}catch(e){}}
-    commits.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-    putDoc("signals/github",{user:u,fetchedAt:nowISO(),ok:true,repos,commits:commits.slice(0,80),asked:(prev.user===u&&prev.asked)||[]});
-    GH={state:"ok",msg:""};ateneaAsk();renderAll();return true}
-  catch(e){const st=e&&e.status;GH={state:"error",msg:st===404?"GitHub no encontró al usuario «"+u+"».":st===403||st===429?"GitHub limitó las consultas por ahora; se reintenta más tarde.":"No se pudo consultar GitHub desde esta vista. El sistema sigue sin esos datos."};renderGh();return false}}
+  const u=ghUser();if(!u||GH.state==="loading")return false;const prev=S.signals||{},mem=ghMem();
+  if(!ghValid(u)){GH={state:"error",msg:"",err:{kind:"invalid",msg:"«"+u+"» no es un usuario válido de GitHub (solo letras, números y guiones, sin espacios).",detail:"validación local, sin consulta"},via:"",warn:"",test:GH.test};renderGh();return false}
+  const age=prev.user===u&&prev.ok&&prev.fetchedAt?Date.now()-Date.parse(prev.fetchedAt):Infinity;
+  if(age<GH_TTL){if(force){GH.msg="Los datos son de hace "+Math.max(1,Math.round(age/60000))+" min. Para respetar el límite de GitHub, la próxima consulta es posible a las "+hm(Date.parse(prev.fetchedAt)+GH_TTL)+".";renderGh()}return false}
+  const same=mem.user===u;
+  if(same&&mem.err&&mem.err.until&&Date.now()<mem.err.until){GH=Object.assign({},GH,{state:"error",msg:"",err:mem.err});renderGh();return false}
+  if(!force&&same&&mem.tryAt&&Date.now()-mem.tryAt<GH_TTL){GH=Object.assign({},GH,{state:mem.err?"error":"",msg:"",err:mem.err||null});renderGh();return false}
+  GH=Object.assign({},GH,{state:"loading",msg:"Consultando tus repos…",err:null,warn:""});renderGh();
+  try{
+    const rr=await ghGet("https://api.github.com/users/"+encodeURIComponent(u)+"/repos?sort=pushed&direction=desc&per_page=15&type=owner",{user:u});
+    const all=Array.isArray(rr.data)?rr.data:[],own=all.filter(x=>!x.fork),pool=own.length?own:all;
+    const repos=pool.slice(0,8).map(x=>({name:x.name,full:x.full_name,url:x.html_url,pushedAt:x.pushed_at||""}));
+    GH.msg="Consultando tus eventos públicos…";renderGh();let evs=[],note="";
+    try{const er=await ghGet("https://api.github.com/users/"+encodeURIComponent(u)+"/events/public?per_page=100",{user:u});evs=Array.isArray(er.data)?er.data:[]}
+    catch(e){if(e&&e.kind==="ratelimit")throw e;note="eventos no disponibles ("+((e&&e.kind)||"error")+")"}
+    const push=evs.filter(e=>e&&e.type==="PushEvent"&&e.repo&&e.repo.name);let targets=[],via="repos";
+    if(push.length){via="eventos";const seen=new Set();push.forEach(e=>{const f=String(e.repo.name),k=f.toLowerCase();if(!seen.has(k)&&seen.size<5){seen.add(k);targets.push({full:f,at:e.created_at||""})}});
+      targets.forEach(t=>{if(!repos.some(r=>r.full.toLowerCase()===t.full.toLowerCase()))repos.push({name:t.full.split("/")[1]||t.full,full:t.full,url:"https://github.com/"+t.full,pushedAt:t.at})})}
+    else targets=repos.slice(0,3).map(r=>({full:r.full,at:r.pushedAt}));
+    const commits=[],warn=[],failed=new Set();
+    for(const t of targets){GH.msg="Consultando los commits de "+t.full+"…";renderGh();
+      const nm=(repos.find(r=>r.full.toLowerCase()===t.full.toLowerCase())||{}).name||t.full.split("/")[1]||t.full;
+      try{const q=a=>"https://api.github.com/repos/"+t.full+"/commits?per_page=10"+(a?"&author="+encodeURIComponent(u):"");
+        let cr=await ghGet(q(true),{repo:t.full}),cs=Array.isArray(cr.data)?cr.data:[];
+        if(!cs.length&&ghOwn(t.full,u)){cr=await ghGet(q(false),{repo:t.full});cs=Array.isArray(cr.data)?cr.data:[]}
+        cs.forEach(c=>{const cm=c.commit||{};commits.push({repo:nm,date:(cm.author&&cm.author.date)||(cm.committer&&cm.committer.date)||"",msg:short(String(cm.message||"").split("\n")[0],140)})})}
+      catch(e){failed.add(nm);if(e&&e.kind==="ratelimit"){warn.push(e.msg);break}warn.push(t.full+": "+((e&&e.msg)||"no se pudieron leer sus commits"))}}
+    if(failed.size&&Array.isArray(prev.commits)&&prev.user===u)prev.commits.forEach(c=>{if(failed.has(c.repo))commits.push(c)});
+    commits.sort((a,b)=>String(b.date).localeCompare(String(a.date)));repos.sort((a,b)=>String(b.pushedAt).localeCompare(String(a.pushedAt)));
+    putDoc("signals/github",{user:u,fetchedAt:nowISO(),ok:true,repos:repos.slice(0,8),commits:commits.slice(0,80),asked:(prev.user===u&&prev.asked)||[]});
+    ghMemSet({user:u,tryAt:Date.now(),err:null,env:null,via});
+    GH={state:"ok",msg:"",err:null,via,warn:warn.concat(note?[note]:[]).join(" · "),test:GH.test};ateneaAsk();renderAll();return true}
+  catch(e){const er=ghAsErr(e);ghMemSet({user:u,tryAt:Date.now(),err:er,env:GH_ENV.includes(er.kind)?Object.assign({at:Date.now()},er):ghMem().env||null});
+    GH={state:"error",msg:"",err:er,via:"",warn:"",test:GH.test};renderGh();return false}}
+/* «Probar conexión»: una sola consulta a /users/{usuario}; muestra el resultado o el error exacto */
+async function ghTest(){const raw=ghClean($("gh-user").value);
+  if(!raw){GH.test={ok:false,msg:"Escribe primero tu usuario de GitHub.",detail:""};renderGh();return}
+  if(!ghValid(raw)){GH.test={ok:false,msg:"«"+raw+"» no es un usuario válido de GitHub (solo letras, números y guiones, sin espacios).",detail:"validación local, sin consulta"};renderGh();return}
+  GH.test={loading:true};renderGh();
+  try{const r=await ghGet("https://api.github.com/users/"+encodeURIComponent(raw),{user:raw}),d=r.data||{};
+    GH.test={ok:true,msg:"Conexión correcta: «"+(d.login||raw)+"» existe en GitHub y tiene "+(d.public_repos==null?"?":d.public_repos)+" repos públicos."+(r.meta.remaining!=null?" Consultas restantes esta hora: "+r.meta.remaining+" de "+(r.meta.limit||"?")+".":"")+(raw!==ghUser()?" Pulsa «Guardar y consultar» para usar este usuario.":""),detail:"GET /users/"+raw+" → HTTP 200"};
+    ghMemSet({env:null})}
+  catch(e){const er=ghAsErr(e);GH.test={ok:false,kind:er.kind,msg:er.msg,detail:er.detail};if(GH_ENV.includes(er.kind))ghMemSet({env:Object.assign({at:Date.now()},er)})}
+  renderGh()}
 function ghProject(repo){const full=ghNorm("github.com/"+repo.full),sl=slug(repo.name);
   return S.projects.find(p=>p.repo&&ghNorm(p.repo).endsWith(full.replace(/^github\.com\//,"")))||S.projects.find(p=>slug(p.title||"")===sl)||null}
 function ghSignals(){const g=S.signals;if(!g||!g.ok||g.user!==ghUser()||!Array.isArray(g.commits))return null;
   const t=today(),mon=monday(t),wk=addDays(t,-6),days=s=>Math.round((parse(t)-parse(s))/864e5),loc=iso=>ds(new Date(iso));
   const repos=(g.repos||[]).map(rp=>{const cs=g.commits.filter(c=>c.repo===rp.name&&c.date),last=cs.length?loc(cs[0].date):(rp.pushedAt?loc(rp.pushedAt):"");
-    return Object.assign({},rp,{last,days:last?days(last):null,week:cs.filter(c=>loc(c.date)>=mon).length,n7:cs.filter(c=>loc(c.date)>=wk).length,lastMsg:cs[0]?cs[0].msg:"",proj:ghProject(rp)})});
+    const pushed=rp.pushedAt?loc(rp.pushedAt):"";
+    return Object.assign({},rp,{last,days:last?days(last):null,pushed,pdays:pushed?days(pushed):null,week:cs.filter(c=>loc(c.date)>=mon).length,n7:cs.filter(c=>loc(c.date)>=wk).length,lastMsg:cs[0]?cs[0].msg:"",proj:ghProject(rp)})});
   const active=repos.filter(x=>x.week>0);
   const doing=S.projects.filter(p=>(p.status||"idea")==="doing").map(p=>{const rp=repos.find(x=>x.proj&&x.proj.id===p.id);return{p,week:rp?rp.week:0,repo:rp}});
   const logTxt=[];for(let i=0;i<7;i++){const s=addDays(t,-i),d=S.days[s];if(!d)continue;const l=logOf(d);logTxt.push({tags:Object.values(l.tags||{}),txt:LF.map(([f])=>l[f]).join(" ").toLowerCase()})}
@@ -1707,35 +1773,414 @@ function ateneaAsk(){const s=ghSignals();if(!s||!s.noLog.length||!depts().some(d
   const t=threadOf("aprendizaje");msgs.forEach(m=>{t.msgs.push(Object.assign({at:nowISO()},m));t.n++});t.unread=(t.unread||0)+msgs.length;putThread("aprendizaje",t);
   const a=SC.agents.aprendizaje;if(a){bubble(a,"Vi commits que no anotaste. ¿Qué aprendiste ahí?",5000);a.emote={k:"?",until:performance.now()+4000}}
   toast("Atenea tiene "+(msgs.length===1?"una pregunta":msgs.length+" preguntas")+" sobre tus commits")}
-function renderGh(){const el=$("gh-user");if(!el)return;const u=ghUser(),g=S.signals;
+const GH_TITLE={csp:"GitHub está bloqueado en este entorno",network:"No hay conexión con GitHub desde aquí",offline:"Sin conexión a internet",ratelimit:"Límite de consultas de GitHub",notfound:"Ese usuario no existe en GitHub",timeout:"GitHub no respondió a tiempo",invalid:"Usuario no válido",forbidden:"GitHub rechazó la consulta",server:"GitHub tiene un error temporal"};
+const ghAlertHTML=er=>`<strong>${esc(GH_TITLE[er.kind]||"No se pudo consultar GitHub")}</strong><span>${esc(er.msg)}</span>${GH_ENV.includes(er.kind)?`<span>Mientras siga así, las SEÑALES de GitHub no se actualizan; todo lo demás del sistema funciona igual.</span>`:""}${er.detail?`<code>${esc(er.detail)}</code>`:""}`;
+function renderGh(){const el=$("gh-user");if(!el)return;const u=ghUser(),mem=ghMem();
   if(document.activeElement!==el&&!el.dataset.dirty&&el.value!==u)el.value=u;
-  const st=$("gh-state"),sig=ghSignals();
-  st.textContent=!u?"Sin conectar":GH.state==="loading"?"Consultando…":GH.state==="error"?"Sin datos nuevos":sig?"Conectado":"Pendiente";st.className="chip "+(!u?"":GH.state==="error"?"warn":sig?"ok":"");
-  $("gh-st").textContent=GH.msg||(sig?"Última consulta: "+pretty(ds(new Date(sig.at)))+" "+hhmm(sig.at)+". Se repite una vez al día.":u?"Aún sin consulta.":"");
-  $("gh-refresh").disabled=!u||GH.state==="loading";
-  const h=sig?`<div class="ghgrid">${sig.repos.length?sig.repos.map(x=>`<div class="ghr"><a href="${esc(x.url||"#")}" target="_blank" rel="noopener">${esc(x.name)}</a><span class="muted">${x.days==null?"—":x.days===0?"commit hoy":"hace "+x.days+" día"+(x.days===1?"":"s")} · ${x.n7} en 7 días${x.proj?" · "+esc(x.proj.title):""}</span>${x.lastMsg?`<span class="ghm">«${T(x.lastMsg)}»</span>`:""}</div>`).join(""):`<div class="empty">Sin repos con actividad en las últimas 3 semanas.</div>`}</div>
+  const sig=ghSignals(),er=GH.err||(u&&mem.user===u&&mem.err?mem.err:null)||mem.env||null,blocked=!!(er&&GH_ENV.includes(er.kind)),loading=GH.state==="loading";
+  const fs=$("fi-s-gh");if(fs)fs.textContent=!u?"Sin conectar":loading?"Consultando…":blocked?"Bloqueado en este entorno":er?"Sin datos nuevos: "+short(GH_TITLE[er.kind]||"error de consulta",44):sig?"@"+u+" · "+sig.repos.length+" repo"+(sig.repos.length===1?"":"s")+" · consultado "+hhmm(sig.at):"@"+u+" · aún sin consulta";
+  const ff=$("fi-f-gh");if(ff)ff.classList.toggle("dirty",!!er&&!loading);
+  const al=$("gh-alert");al.hidden=!er||loading;if(er){const h=ghAlertHTML(er);if(al.__h!==h){al.innerHTML=h;al.__h=h}al.className="ghalert "+(blocked?"bad":"warn")}
+  const to=$("gh-test-out"),t=GH.test;to.hidden=!t;
+  if(t){to.className="ghtest "+(t.loading?"":t.ok?"ok":"bad");const h=t.loading?"Probando la conexión con api.github.com…":`<strong>${t.ok?"Funciona":"No funciona"}</strong><span>${esc(t.msg)}</span>${t.detail?`<code>${esc(t.detail)}</code>`:""}`;if(to.__h!==h){to.innerHTML=h;to.__h=h}}
+  const next=sig?Date.parse(sig.at)+GH_TTL:0;
+  $("gh-st").textContent=loading?GH.msg:(GH.msg||(sig?"Última consulta: "+pretty(ds(new Date(sig.at)))+" "+hhmm(sig.at)+" · "+(next>Date.now()?"la próxima es posible a las "+hm(next):"ya puedes actualizar")+(GH.via?" · fuente: "+(GH.via==="eventos"?"tus eventos públicos":"tus repos por último push"):""):u?"Aún sin consulta.":""))+(!loading&&GH.warn?" · Aviso: "+GH.warn:"");
+  $("gh-refresh").disabled=!u||loading;$("gh-test").disabled=loading||!!(t&&t.loading);$("gh-save").disabled=loading;
+  const ago=n=>n==null?"—":n===0?"hoy":"hace "+n+" día"+(n===1?"":"s");
+  const h=sig?`<h4 class="sub">Repos públicos más recientes</h4><div class="ghlist">${sig.repos.length?sig.repos.map(x=>`<div class="ghrow"><a href="${esc(x.url||"#")}" target="_blank" rel="noopener noreferrer">${esc(x.name)}</a><span class="muted">último push: ${x.pushed?esc(pretty(x.pushed))+" · "+ago(x.pdays):"—"}</span>${x.proj?`<span class="chip">${esc(x.proj.title)}</span>`:""}</div>`).join(""):`<div class="empty">GitHub no devolvió repos públicos para este usuario.</div>`}</div>
+    <h4 class="sub">Últimos commits</h4><div class="ghlist">${sig.commits.length?sig.commits.map(c=>`<div class="ghrow"><span class="muted num">${c.date?esc(pretty(ds(new Date(c.date))))+" "+hhmm(c.date):"—"}</span><span><strong>${esc(c.repo)}</strong> · ${T(c.msg)}</span></div>`).join(""):`<div class="empty">Sin commits para mostrar.</div>`}</div>
     ${sig.noLog.length?`<p class="hint" style="margin:0">Con commits pero sin bitácora: ${esc(sig.noLog.map(x=>x.proj?x.proj.title:x.name).join(", "))}. Atenea te pregunta en su chat.</p>`:""}`:"";
   const b=$("gh-sum");if(b.__h!==h){b.innerHTML=h;b.__h=h}}
 $("gh-user").addEventListener("input",e=>{e.target.dataset.dirty="1"});
-$("gh-save").onclick=async()=>{const v=$("gh-user").value.trim().replace(/^@/,"");const p=profOf();p.github=v;delete $("gh-user").dataset.dirty;await putProfile(p);GH={state:"",msg:""};renderGh();if(v)ghFetch(true);else toast("Usuario de GitHub quitado")};
+$("gh-user").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();ghTest()}});
+$("gh-save").onclick=async()=>{const v=ghClean($("gh-user").value);const p=profOf();p.github=v;delete $("gh-user").dataset.dirty;await putProfile(p);GH=Object.assign({},GH,{state:"",msg:"",err:null,via:"",warn:"",test:null});renderGh();if(v)ghFetch(true);else toast("Usuario de GitHub quitado")};
 $("gh-refresh").onclick=()=>ghFetch(true);
-function ghBoot(){if(GH_AUTO||!S.profile)return;GH_AUTO=true;if(ghUser())setTimeout(()=>ghFetch(false),1500)}
+$("gh-test").onclick=ghTest;
+function ghBoot(){if(GH_AUTO||!S.profile)return;GH_AUTO=true;renderGh();if(ghUser())setTimeout(()=>ghFetch(false),1500)}
 
-/* ---------- Ajustes: perfil del comandante ---------- */
+/* ---------- ficha del comandante: perfil (meta, contexto, restricciones, patrones) ---------- */
 const PFF=[["pf-goal","goal"],["pf-date","goalDate"],["pf-hours","hours"],["pf-money","money"],["pf-commit","commitments"],["pf-learn","learnBest"],["pf-nolearn","learnBad"],["pf-patterns","patterns"],["pf-avoid","avoid"]];
-function renderPerfil(){const p=profOf();
-  PFF.forEach(([el,k])=>{const x=$(el);if(document.activeElement===x||x.dataset.dirty)return;let v=Array.isArray(p[k])?p[k].join("\n"):p[k];if(k==="goal"&&!v&&!p.saved)v=cfg().goal||"";if(x.value!==v)x.value=v});
-  const n=[p.goal,p.hours||p.money||p.commitments,p.learnBest||p.learnBad,p.patterns.length,p.avoid.length].filter(Boolean).length;
-  const st=$("pf-state");st.textContent=S.profile?n+"/5 secciones":"Sin guardar";st.className="chip "+(n>=4?"ok":n?"warn":"");
-  $("pf-pn").textContent=p.pending.length;$("pf-pn").className="chip "+(p.pending.length?"warn":"");
-  const h=p.pending.length?p.pending.map(x=>`<div class="prop" data-pat="${esc(x.id)}"><div class="row" style="gap:6px"><span style="font:500 .82rem var(--f-display);color:${whoInfo(x.by).color}">${esc(nameOf(x.by))}</span><span class="muted" style="font-size:.78rem">${esc(x.at?pretty(ds(new Date(x.at))):"")}</span></div><div class="t"><strong>${T(x.t)}</strong></div>${x.ev?`<div class="muted t" style="font-size:.86rem">Evidencia: ${T(x.ev)}</div>`:""}<div class="row"><button class="btn primary" type="button" data-pact="ok">Aprobar</button><button class="btn ghost" type="button" data-pact="no">Descartar</button></div></div>`).join(""):`<div class="empty">Sin patrones propuestos. Los agentes los proponen cuando ven algo que se repite en tus datos.</div>`;
-  const el=$("pf-pending");if(el.__h!==h){el.innerHTML=h;el.__h=h}}
-PFF.forEach(([el])=>$(el).addEventListener("input",e=>{e.target.dataset.dirty="1";$("pf-st").textContent="Cambios sin guardar"}));
+function renderPerfil(){const p=profOf(),c=cfg();
+  PFF.forEach(([el,k])=>{const x=$(el);if(document.activeElement===x||x.dataset.dirty)return;let v=Array.isArray(p[k])?p[k].join("\n"):p[k];if(k==="goal"&&!v)v=c.goal||"";if(x.value!==v)x.value=v});
+  const cx=$("pf-ctx");if(document.activeElement!==cx&&!cx.dataset.dirty&&cx.value!==(c.context||""))cx.value=c.context||"";
+  const ow=$("pf-owner");if(ow&&document.activeElement!==ow&&!ow.dataset.dirty&&ow.value!==(c.owner||""))ow.value=c.owner||"";
+  const n=[p.goal||c.goal,p.hours||p.money||p.commitments,p.learnBest||p.learnBad,p.patterns.length,p.avoid.length].filter(Boolean).length;
+  const np=p.pending.length;$("fi-s-perfil").textContent=(S.profile?n+"/5 secciones":"Sin guardar")+(np?" · "+np+" patrón"+(np===1?"":"es")+" por revisar":"");
+  $("fi-f-perfil").classList.toggle("dirty",!!np);
+  $("pf-pn").textContent=np;$("pf-pn").className="chip "+(np?"warn":"");
+  const h=np?p.pending.map(x=>`<div class="prop" data-pat="${esc(x.id)}"><div class="row" style="gap:6px"><span style="font:500 .82rem var(--f-display);color:${whoInfo(x.by).color}">${esc(nameOf(x.by))}</span><span class="muted" style="font-size:.78rem">${esc(x.at?pretty(ds(new Date(x.at))):"")}</span></div><div class="t"><strong>${T(x.t)}</strong></div>${x.ev?`<div class="muted t" style="font-size:.86rem">Evidencia: ${T(x.ev)}</div>`:""}<div class="row"><button class="btn primary" type="button" data-pact="ok">Aprobar</button><button class="btn ghost" type="button" data-pact="no">Descartar</button></div></div>`).join(""):`<div class="empty">Sin patrones propuestos. Los agentes los proponen cuando ven algo que se repite en tus datos.</div>`;
+  const el=$("pf-pending");if(el.__h!==h){el.innerHTML=h;el.__h=h}
+  try{renderProfBtn()}catch(e){}}
+[...PFF.map(x=>x[0]),"pf-ctx","pf-owner"].forEach(id=>{const x=$(id);if(x)x.addEventListener("input",e=>{e.target.dataset.dirty="1";$("pf-st").textContent="Cambios sin guardar"})});
 $("pf-save").onclick=()=>{const p=profOf(),g=id=>$(id).value.trim(),lines=id=>$(id).value.split("\n").map(s=>s.trim()).filter(Boolean).slice(0,20);
-  Object.assign(p,{saved:true,goal:g("pf-goal"),goalDate:g("pf-date"),hours:g("pf-hours"),money:g("pf-money"),commitments:g("pf-commit"),learnBest:g("pf-learn"),learnBad:g("pf-nolearn"),patterns:lines("pf-patterns"),avoid:lines("pf-avoid")});
-  PFF.forEach(([el])=>delete $(el).dataset.dirty);$("pf-st").textContent="Guardando…";
-  putProfile(p).then(ok=>{$("pf-st").textContent=ok?"Guardado: todos los agentes lo reciben desde ya.":"No se pudo guardar."});renderPerfil()};
+  const goal=g("pf-goal"),ow=$("pf-owner"),ctx=g("pf-ctx"),c=S.config,ch={};
+  Object.assign(p,{saved:true,goal,goalDate:g("pf-date"),hours:g("pf-hours"),money:g("pf-money"),commitments:g("pf-commit"),learnBest:g("pf-learn"),learnBad:g("pf-nolearn"),patterns:lines("pf-patterns"),avoid:lines("pf-avoid")});
+  if(c){if(goal&&goal!==(c.goal||""))ch.goal=goal;if($("pf-ctx").dataset.dirty&&ctx!==(c.context||""))ch.context=ctx;if(ow&&ow.dataset.dirty&&g("pf-owner")!==(c.owner||""))ch.owner=g("pf-owner")}
+  else if($("pf-ctx").dataset.dirty||(ow&&ow.dataset.dirty))toast("La configuración aún no carga: el contexto y el nombre no se guardaron.");
+  PFF.forEach(([el])=>delete $(el).dataset.dirty);delete $("pf-ctx").dataset.dirty;if(ow)delete ow.dataset.dirty;$("pf-st").textContent="Guardando…";
+  const jobs=[putProfile(p)];
+  if(Object.keys(ch).length){const nc=Object.assign({},c,ch,{updated:nowISO()});S.config=nc;jobs.push(save("config/main",nc));if(ch.goal)save("changelog/l"+Date.now().toString(36),{date:today(),text:"Meta actualizada: "+short(goal,140)})}
+  Promise.all(jobs).then(r=>{$("pf-st").textContent=r.every(Boolean)?"Guardado: todos los agentes lo reciben desde ya.":"No se pudo guardar."});renderPerfil()};
 $("pf-pending").addEventListener("click",e=>{const b=e.target.closest("button[data-pact]");if(!b)return;patternAct(b.closest(".prop").dataset.pat,b.dataset.pact==="ok")});
+/* =================== AVATARES · sellos místicos en pixel art (dibujados en código) =================== */
+/* Lienzo de 24×24: marco dorado de 2 px + 20×20 de arte. Cada avatar se dibuja con rectángulos, elipses y polígonos; sin imágenes externas. */
+const AVN=24;
+const AK={ink:"#05061A",nav:"#0C1138",in1:"#1A1F52",in2:"#2C357C",in3:"#3A4699",vio:"#5B4FD0",vioD:"#4B3FB0",vioK:"#2B2380",vioL:"#8F89E6",lav:"#B9B2FF",pale:"#E4DEFF",gold:"#FFC15A",goldL:"#FFE9A6",goldD:"#B8862E",cy:"#5AD1E8",cyD:"#2B7FA8",cyK:"#17506E",or:"#FF9E6B",red:"#FF6F61",redD:"#C8423A",pink:"#FF7AA8",gr:"#7EE0A1",grD:"#2F8F6B",grK:"#1D5C4A",white:"#F1EEFF",steel:"#A9B0E0",steelD:"#6C7AC8",steelK:"#3A4699"};
+let AVG=null,AVSYM=false,AVSKY=["#1A1F52","#0C1138"];
+const avHex=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const avMix=(a,b,t)=>{const A=avHex(a),B=avHex(b);return"#"+A.map((v,i)=>Math.round(v+(B[i]-v)*t).toString(16).padStart(2,"0")).join("")};
+const avSky=y=>avMix(AVSKY[0],AVSKY[1],Math.max(0,Math.min(1,(y-2)/19)));
+function avR(x,y,w,h,c){AVG.fillStyle=c;AVG.fillRect(x,y,w,h);if(AVSYM&&AVN-x-w!==x)AVG.fillRect(AVN-x-w,y,w,h)}
+function avP(x,y,c){avR(x,y,1,1,c)}
+function avFill(test,col){for(let j=0;j<AVN;j++)for(let i=0;i<AVN;i++){let c=null;
+  if(test(i+.5,j+.5))c=typeof col==="function"?col(i,j):col;
+  else if(AVSYM&&test(AVN-i-.5,j+.5))c=typeof col==="function"?col(AVN-1-i,j):col;
+  if(c){AVG.fillStyle=c;AVG.fillRect(i,j,1,1)}}}
+function avE(cx,cy,rx,ry,col){avFill((x,y)=>{const dx=(x-cx)/rx,dy=(y-cy)/ry;return dx*dx+dy*dy<=1},col)}
+function avIn(x,y,p){let o=false;for(let i=0,j=p.length-1;i<p.length;j=i++){const a=p[i],b=p[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])o=!o}return o}
+function avPoly(p,col){avFill((x,y)=>avIn(x,y,p),col)}
+function avL(x0,y0,x1,y1,c){const dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1;let e=dx+dy;for(;;){avP(x0,y0,c);if(x0===x1&&y0===y1)break;const e2=2*e;if(e2>=dy){e+=dy;x0+=sx}if(e2<=dx){e+=dx;y0+=sy}}}
+function avBg(top,bot,stars){AVSKY=[top,bot];for(let j=2;j<22;j++){AVG.fillStyle=avSky(j);AVG.fillRect(2,j,20,1)}(stars||[]).forEach(s=>avP(s[0],s[1],s[2]))}
+function avFrame(acc){
+  const C=(x,y,c)=>{AVG.fillStyle=c;AVG.fillRect(x,y,1,1)};
+  for(let i=1;i<23;i++){C(i,0,AK.ink);C(i,23,AK.ink);C(0,i,AK.ink);C(23,i,AK.ink)}
+  for(let i=2;i<22;i++){C(i,1,AK.goldL);C(1,i,AK.goldL);C(i,22,AK.goldD);C(22,i,AK.goldD)}
+  C(1,1,acc);C(22,1,acc);C(1,22,acc);C(22,22,acc);
+  C(11,0,AK.gold);C(12,0,AK.gold);C(11,23,AK.goldD);C(12,23,AK.goldD);C(0,11,AK.gold);C(0,12,AK.gold);C(23,11,AK.goldD);C(23,12,AK.goldD);
+  AVG.fillStyle="rgba(5,6,26,.5)";for(let i=2;i<22;i++){AVG.fillRect(i,2,1,1);AVG.fillRect(2,i,1,1);AVG.fillRect(i,21,1,1);AVG.fillRect(21,i,1,1)}
+  C(2,2,acc);C(21,2,acc);C(2,21,acc);C(21,21,acc);
+}
+function avBuho(){
+  avBg("#232A7A","#0C1138",[[4,4,AK.goldL],[19,5,AK.lav],[4,12,AK.lav],[20,11,AK.goldL],[18,17,AK.lav]]);
+  avR(2,19,20,2,"#5B3A24");avR(2,19,20,1,"#8A5A36");avR(2,20,20,1,"#3A2314");
+  AVSYM=true;
+  avE(12,14.5,5.8,5.6,AK.vio);
+  avE(7.3,14.6,1.8,4.6,AK.vioD);
+  avE(12,16,3.1,3.9,AK.pale);
+  [[10,13],[11,15],[10,17],[12,18],[9,15]].forEach(p=>avP(p[0],p[1],AK.lav));
+  avPoly([[5.4,7.4],[4.8,2.4],[9.4,5.2]],AK.vioD);
+  avPoly([[6.2,6.4],[5.8,3.8],[8.2,5.4]],AK.vio);
+  avE(12,9,6.9,5.4,AK.vio);
+  avE(8.9,9.2,3.5,3.4,AK.pale);
+  avE(8.9,9.2,2.5,2.5,AK.gold);
+  avE(8.9,9.2,1.3,1.3,AK.ink);
+  avP(8,8,AK.white);
+  avPoly([[11,10.4],[13,10.4],[12,12.8]],AK.or);
+  avP(11,10,AK.gold);
+  avR(10,19,1,1,AK.gold);avR(9,19,1,1,AK.gold);
+  AVSYM=false;
+}
+function avCuervo(){
+  avBg("#1A1B66","#0A0E34",[[4,4,AK.goldL],[19,3,AK.lav],[3,13,AK.lav],[20,12,AK.goldL],[3,20,AK.goldL]]);
+  avE(11.6,9.4,7,7,AK.goldL);
+  avFill((x,y)=>Math.hypot(x-11.6,y-9.4)<=7,(i,j)=>Math.hypot(i+.5-11.6,j+.5-9.4)>5.7?AK.gold:AK.goldL);
+  avP(7,7,AK.goldD);avP(8,7,AK.goldD);avP(8,8,AK.goldD);avP(14,5,AK.goldD);avP(15,12,AK.goldD);avP(14,12,AK.goldD);
+  avR(2,18,20,2,"#4A3322");avR(2,18,20,1,"#7A5636");
+  avPoly([[2.2,20.2],[5,13.6],[9,17],[4,21]],"#3A3490");
+  avPoly([[4,18],[4.6,12.6],[8.4,9.2],[13.8,8.6],[16.4,11],[16,15],[11,18.4]],"#3A3490");
+  avPoly([[2.6,19.8],[5.2,14.2],[8.6,17.4],[4,20.6]],"#120F33");
+  avPoly([[4.4,17.4],[5,13],[8.5,9.6],[13.6,9],[16,11],[15.6,14.4],[11,17.6]],"#120F33");
+  avPoly([[6.6,13],[11.6,10.6],[14.2,13.4],[9.4,16.6],[5.8,15.4]],"#241C66");
+  [[8,13],[10,12],[12,12],[9,15],[11,15],[13,14]].forEach(p=>avP(p[0],p[1],"#5A54A8"));
+  avE(15.8,8.2,3,2.8,"#120F33");
+  avPoly([[18,7.2],[21.8,8.7],[18,10]],AK.or);avPoly([[18,8.9],[21.8,8.8],[18,10]],AK.redD);
+  avR(16,7,1,1,AK.goldL);avP(15,6,"#5A54A8");avP(14,10,"#5A54A8");
+  avR(11,17,1,2,"#B89A5A");avR(14,17,1,2,"#B89A5A");
+}
+function avLobo(){
+  avBg("#1B2872","#0A1030",[[4,3,AK.cy],[20,3,AK.lav],[3,19,AK.lav],[20,19,AK.cy],[2,11,AK.goldL]]);
+  AVSYM=true;
+  avPoly([[3.2,1.8],[10.6,6.6],[4.6,11.8]],AK.steelD);avPoly([[4.8,4.4],[9,7],[5.6,10]],AK.pink);
+  avPoly([[4.6,10.4],[2.4,14.2],[5.6,13.8],[4.6,17.4],[8.6,15.6]],AK.steel);
+  avE(12,10.4,7,5.6,AK.steel);
+  avPoly([[4.8,9],[12,6],[12,9.6],[8,10.6]],AK.steelD);
+  avPoly([[12,9.4],[10.6,10.4],[9.8,14],[10.4,18.2],[12,19.8]],AK.pale);
+  avPoly([[12,6.4],[11,7.6],[12,9.6]],AK.pale);
+  avPoly([[5.4,9.6],[9.6,10.2],[9.8,11.8],[6.4,11.6]],AK.gold);
+  avR(8,10,2,2,AK.ink);avP(7,10,AK.goldL);
+  avPoly([[4.8,8.4],[9.8,9.4],[9.6,10],[5,9]],AK.steelK);
+  avR(11,15,1,2,AK.ink);avP(11,15,AK.in3);
+  avR(10,18,1,1,AK.white);avP(9,13,AK.steelD);avP(8,14,AK.steelD);
+  AVSYM=false;
+}
+function avFenix(){
+  avBg("#34185E","#12082E",[[3,4,AK.goldL],[20,5,AK.pink],[3,14,AK.pink],[20,15,AK.goldL]]);
+  AVSYM=true;
+  avPoly([[11,11],[2.6,3.4],[2.6,9],[4.6,13],[3.4,16.4],[8.6,15.4],[11,19]],AK.redD);
+  avPoly([[11,11],[4.4,5.4],[4.6,9.4],[6,12.6],[5.8,15],[9.4,14.6],[11,17.4]],AK.red);
+  avPoly([[11,11.6],[6,7.4],[6.6,10.6],[8,12.6],[7.8,14],[10.4,14.2]],AK.or);
+  avPoly([[11,12.2],[8,9.6],[8.8,12],[10,13.2]],AK.gold);
+  avPoly([[10.4,18],[9.4,21.4],[11.6,19.8]],AK.redD);avPoly([[11,17],[11,21.4],[12,21.4],[13,17]],AK.or);
+  avE(12,13,2.4,5,AK.or);avE(12,13.6,1.4,3.6,AK.gold);
+  avPoly([[10.4,6],[9.2,2.2],[11.2,4.2],[12,1.2]],AK.gold);avPoly([[11,5.6],[11,2.8],[12,2.2]],AK.goldL);
+  avE(12,7.6,2.3,2.4,AK.red);
+  avP(10,7,AK.ink);avP(10,6,AK.goldL);
+  avPoly([[11,8.4],[13,8.4],[12,10.6]],AK.gold);
+  AVSYM=false;
+}
+function avOuroboros(){
+  avBg("#0E2A3C","#07121F",[[3,3,AK.gr],[20,3,AK.cy],[3,19,AK.cy],[20,19,AK.gr],[19,12,AK.goldL]]);
+  const cx=12,cy=12.2,th=-70;
+  const sOf=(x,y)=>{let a=Math.atan2(y-cy,x-cx)*180/Math.PI;return (((a-th)%360)+360)%360/360};
+  avFill((x,y)=>{const d=Math.hypot(x-cx,y-cy);if(d<4.9||d>9.2)return false;const s=sOf(x,y);if(s>.93)return false;const w=s<.55?1:Math.max(.12,1-(s-.55)/.42);return Math.abs(d-7.05)<=2.05*w},(i,j)=>{const a=Math.atan2(j+.5-cy,i+.5-cx),d=Math.hypot(i+.5-cx,j+.5-cy);const k=(Math.floor((a+Math.PI)/(Math.PI*2)*30)+(d>7.05?1:0))%2;const hl=d<6.1&&a>-2.8&&a<-1.1;return hl?AK.gr:k?AK.grD:"#3FAE80"});
+  avE(12,12.2,3,3,"#0A1A2A");avP(11,11,AK.gold);avP(12,11,AK.gold);avP(11,12,AK.gold);avP(12,12,AK.goldL);avP(11,13,AK.gold);avP(12,13,AK.gold);
+  avE(15.6,6.2,3.1,2.7,AK.gr);avPoly([[13.8,4.2],[10.2,3.6],[14.4,5.9]],AK.gr);avPoly([[14.4,6.6],[10.6,6.8],[13.6,8.6]],AK.grD);
+  avP(14,5,AK.gold);avP(14,5,AK.red);avP(11,4,AK.white);avP(11,6,AK.white);avP(16,4,AK.goldL);avP(17,6,AK.grD);avP(16,8,AK.grD);
+}
+function avOjo(){
+  avBg("#2A1B66","#0C1138",[[4,4,AK.goldL],[19,4,AK.lav],[3,17,AK.lav],[20,16,AK.goldL]]);
+  const cx=12,cy=12.6;
+  for(let k=0;k<16;k++){const a=k*Math.PI/8+.2;for(let r=8.6;r<13;r+=1)avP(Math.round(cx+Math.cos(a)*r),Math.round(cy+Math.sin(a)*r*.9),k%2?AK.goldD:"#6E5A8A")}
+  avPoly([[12,3],[21,19.4],[3,19.4]],AK.gold);
+  avPoly([[12,5.2],[19,18.2],[5,18.2]],AK.vioK);
+  avPoly([[12,5.2],[12,18.2],[5,18.2]],"#322A8C");
+  avPoly([[2.6,14.6],[12,10.2],[21.4,14.6],[12,18.4]],AK.ink);
+  avE(12,14.2,5.6,3.1,AK.white);
+  avE(12,14.3,2.6,2.6,AK.cy);avE(12,14.3,2.6,2.6,(i,j)=>(j<14?AK.cy:AK.cyD));
+  avE(12,14.3,1.2,1.2,AK.ink);avP(11,13,AK.white);
+  avL(6,12,12,10,AK.goldL);avL(12,10,18,12,AK.goldL);
+}
+function avLuna(){
+  avBg("#1A1F6E","#080C2A",[[18,4,AK.goldL],[4,5,AK.lav],[20,12,AK.lav],[5,18,AK.goldL],[17,19,AK.lav]]);
+  avE(11.2,12,7.6,7.6,AK.goldL);
+  avFill((x,y)=>Math.hypot(x-11.2,y-12)<=7.6,(i,j)=>{const d=Math.hypot(i+.5-11.2,j+.5-12);return d>6.2?AK.gold:AK.goldL});
+  avE(15.6,10.6,6.5,6.5,(i,j)=>avSky(j));
+  avFill((x,y)=>Math.hypot(x-11.2,y-12)<=7.6&&Math.hypot(x-15.6,y-10.6)>6.5,(i,j)=>{const d=Math.hypot(i+.5-11.2,j+.5-12);return d>6.3?AK.gold:AK.goldL});
+  avP(8,10,AK.goldD);avP(9,10,AK.goldD);avP(7,15,AK.goldD);avP(8,15,AK.goldD);avP(8,16,AK.goldD);avP(9,13,AK.gold);
+  [[17,6],[16,16]].forEach(p=>{avP(p[0],p[1],AK.white);avP(p[0]-1,p[1],AK.lav);avP(p[0]+1,p[1],AK.lav);avP(p[0],p[1]-1,AK.lav);avP(p[0],p[1]+1,AK.lav)});
+}
+function avLlama(){
+  avBg("#33134E","#100828",[[3,5,AK.or],[20,4,AK.pink],[3,16,AK.pink],[20,17,AK.or]]);
+  avPoly([[11.4,1.8],[13.4,4.6],[12.8,6.8],[15.2,8.6],[17.8,12],[17,16.6],[13.8,19.8],[9.6,19.8],[6.4,16.6],[5.8,12.4],[7.6,9.2],[6.8,5.4],[9.6,7.4],[10.2,4.2]],AK.redD);
+  avPoly([[11.6,4],[12.8,6.4],[12.2,8.2],[14.8,10],[16.4,13],[15.6,16.6],[12.6,18.8],[9.8,18.8],[7.6,16.2],[7.2,13],[9,10.4],[9.2,8.4],[10.6,10],[10.8,6.6]],AK.red);
+  avPoly([[12,8.6],[13.2,10.8],[14.8,13.4],[14,16.8],[12,18.4],[10.2,16.8],[9.2,13.8],[10.2,11.8],[11.4,12],[11.6,10]],AK.or);
+  avPoly([[12,12],[13.2,14],[12.8,16.6],[12,17.8],[11.2,16.6],[10.8,14.4]],AK.gold);
+  avPoly([[12,14.2],[12.6,15.8],[12,17],[11.4,15.8]],AK.goldL);
+  [[5,7,AK.or],[18,6,AK.gold],[16,3,AK.or],[4,13,AK.gold],[19,15,AK.or],[17,10,AK.pink]].forEach(p=>avP(p[0],p[1],p[2]));
+}
+function avArbol(){
+  avBg("#12295E","#08123A",[[4,4,AK.goldL],[19,4,AK.lav],[20,12,AK.goldL],[3,13,AK.lav]]);
+  avE(12,3.6,0.1,0.1,AK.gold);
+  AVSYM=true;
+  avPoly([[10.4,10],[13.6,10],[13,15],[15,19.6],[12,17.4],[9,19.6],[11,15]],"#7A5233");
+  avL(10,15,5,19,"#7A5233");avL(10,16,3,20,"#5B3A24");avL(11,17,8,21,"#5B3A24");
+  avR(11,10,1,6,"#A87444");
+  avE(12,6.6,7.4,4.6,AK.grK);
+  avE(7.6,8.6,3.6,2.8,AK.grK);
+  avE(12,6.2,6.4,3.8,AK.grD);
+  avE(8.2,8.2,2.8,2.1,AK.grD);
+  avE(11,5,3.8,2.2,AK.gr);
+  avE(7.4,7,2,1.3,AK.gr);
+  [[9,6,AK.goldL],[6,8,AK.cy],[10,4,AK.white],[8,9,AK.gold]].forEach(p=>avP(p[0],p[1],p[2]));
+  AVSYM=false;
+  avP(15,6,AK.goldL);avP(16,8,AK.cy);avP(13,4,AK.white);
+}
+function avYelmo(){
+  avBg("#262E7A","#0C1138",[[4,4,AK.goldL],[19,3,AK.lav],[2,14,AK.lav],[21,13,AK.goldL]]);
+  AVSYM=true;
+  avPoly([[4.6,11],[2.2,6.6],[2.8,2.6],[4.8,5],[6.4,8.4]],AK.pale);avPoly([[4.6,10],[3,6.6],[3.4,4.2],[4.6,6.4],[5.6,8.6]],AK.white);avP(3,3,AK.goldL);
+  avPoly([[11,3],[13,3],[12.4,5.6],[11.6,5.6]],AK.red);avR(11,1,2,3,AK.red);avR(11,1,2,1,AK.or);
+  avE(12,9.6,7,6.4,AK.steelK);
+  avPoly([[4.8,10],[19.2,10],[18.4,17.6],[15,20.6],[9,20.6],[5.6,17.6]],AK.steelK);
+  avE(12,9.6,6.2,5.6,AK.steel);
+  avPoly([[5.6,10],[18.4,10],[17.6,17],[14.6,19.8],[9.4,19.8],[6.4,17]],AK.steel);
+  avPoly([[5.6,10.4],[8.6,11],[9.4,16],[7.6,18.6],[6.4,17]],AK.steelD);
+  avR(5,9,14,2,AK.gold);avR(5,9,14,1,AK.goldL);avP(5,10,AK.goldD);
+  avR(6,11,5,2,AK.ink);avR(7,11,3,1,AK.cyD);avP(8,11,AK.cy);avP(9,11,AK.cy);
+  avR(11,9,2,10,AK.steelD);avR(11,11,1,8,AK.steel);avR(11,9,1,1,AK.goldL);
+  avE(12,6.2,3.4,2.2,AK.pale);avE(12,6.2,2.6,1.6,AK.white);
+  avP(6,15,AK.in3);avP(7,16,AK.in3);avP(8,15,AK.in3);avP(6,5,AK.gold);avP(9,18,AK.gold);
+  AVSYM=false;
+}
+function avMascara(){
+  avBg("#3A1A6A","#150A36",[[3,3,AK.pink],[20,3,AK.goldL],[2,18,AK.goldL],[20,19,AK.pink],[3,10,AK.lav]]);
+  avPoly([[15.6,8],[16.6,2.2],[19,2.6],[18,8.6]],AK.pink);avPoly([[17,8],[19.6,4],[21.2,5.6],[18.6,9]],AK.cy);avPoly([[14.4,8.6],[15,3.4],[16.4,4],[15.6,9]],AK.gold);
+  AVSYM=true;
+  avPoly([[12,8.4],[9.8,7],[6,6.8],[2.8,9.4],[3.4,12.8],[6.4,15.2],[9.6,14.8],[10.8,12.6],[12,12.2]],AK.pale);
+  avPoly([[12,13],[10.8,12.6],[9.6,14.8],[6.4,15.2],[3.4,12.8],[3.8,13.6],[6.4,16],[10.2,15.6],[11.6,13.6]],AK.lav);
+  avPoly([[5.2,9.4],[8.8,8.8],[10.2,10.8],[8.4,12.6],[6,12.2]],AK.ink);
+  avPoly([[5.8,9.8],[8.4,9.4],[9.2,10.6]],AK.vioL);avP(8,10,AK.pink);
+  avL(4,8,7,7,AK.gold);avL(3,12,6,14,AK.gold);avL(9,8,11,9,AK.gold);
+  avE(12,9.2,1.3,1.5,AK.pink);avP(12,8,AK.white);
+  AVSYM=false;
+  avR(11,12,2,1,AK.lav);
+  avPoly([[10.6,17.6],[12,17],[13.4,17.6],[12,19]],AK.red);avR(11,17,2,1,AK.redD);
+}
+function avRuna(){
+  avBg("#17205E","#0A1030",[]);
+  avPoly([[4,3.4],[20,3.4],[20.6,20],[3.4,20]],"#3A4699");
+  avPoly([[5,4.4],[19,4.4],[19.6,19],[4.4,19]],"#2C357C");
+  avR(5,4,14,1,"#5560B8");avR(4,5,1,14,"#4752A8");avR(19,5,1,14,"#1A2266");avR(5,19,15,1,"#1A2266");
+  [[6,16,AK.in1],[16,6,AK.in1],[7,7,AK.in1],[17,15,AK.in1]].forEach(p=>avP(p[0],p[1],p[2]));
+  AVG.fillStyle="rgba(90,209,232,.22)";
+  for(let j=5;j<19;j++)for(let i=5;i<19;i++){const d=Math.min(Math.abs(i-11.5),99);if(Math.abs(i-11.5)<4.5&&Math.abs(j-11.5)<7)AVG.fillRect(i,j,1,1)}
+  avR(11,6,2,12,AK.cyD);avL(11,10,6,6,AK.cyD);avL(12,10,17,6,AK.cyD);avL(11,11,6,7,AK.cyD);avL(12,11,17,7,AK.cyD);
+  avR(11,6,1,12,AK.cy);avR(12,6,1,12,AK.white);avL(11,10,7,6,AK.cy);avL(12,10,16,6,AK.cy);
+  [[8,17,AK.cy],[16,17,AK.cy],[10,5,AK.white],[15,12,AK.cy]].forEach(p=>avP(p[0],p[1],p[2]));
+}
+const AV_DEFS=[
+  {id:"buho",name:"Búho",accent:AK.gold,draw:avBuho},
+  {id:"cuervo",name:"Cuervo",accent:AK.lav,draw:avCuervo},
+  {id:"lobo",name:"Lobo",accent:AK.cy,draw:avLobo},
+  {id:"fenix",name:"Fénix",accent:AK.or,draw:avFenix},
+  {id:"ouroboros",name:"Ouroboros",accent:AK.gr,draw:avOuroboros},
+  {id:"ojo",name:"Ojo que todo lo ve",accent:AK.gold,draw:avOjo},
+  {id:"luna",name:"Luna",accent:AK.goldL,draw:avLuna},
+  {id:"llama",name:"Llama",accent:AK.red,draw:avLlama},
+  {id:"arbol",name:"Árbol del mundo",accent:AK.gr,draw:avArbol},
+  {id:"yelmo",name:"Yelmo",accent:AK.steel,draw:avYelmo},
+  {id:"mascara",name:"Máscara",accent:AK.pink,draw:avMascara},
+  {id:"runa",name:"Runa",accent:AK.cy,draw:avRuna}
+];
+function avRender(def){const c=document.createElement("canvas");c.width=c.height=AVN;AVG=c.getContext("2d");AVG.imageSmoothingEnabled=false;AVSYM=false;def.draw();AVSYM=false;avFrame(def.accent);return c}
+
+/* emblema de 5×5 (para el pecho del comandante en el mapa): el píxel más vivo de cada bloque de 4×4 */
+function avEmblem(c){const d=c.getContext("2d").getImageData(2,2,20,20).data,out=[];
+  for(let by=0;by<5;by++)for(let bx=0;bx<5;bx++){let best=null,bs=-1;
+    for(let y=0;y<4;y++)for(let x=0;x<4;x++){const i=((by*4+y)*20+bx*4+x)*4,r=d[i],g=d[i+1],b=d[i+2],mx=Math.max(r,g,b),mn=Math.min(r,g,b),s=(mx-mn)+.45*(.299*r+.587*g+.114*b);if(s>bs){bs=s;best=[r,g,b]}}
+    out.push("#"+best.map(v=>v.toString(16).padStart(2,"0")).join(""))}
+  return out}
+const AV_KEY="kasanov:avatar:v1",AVURL={};
+let AV={id:"buho",chosen:false,url:"",acc:AK.gold,emb:null,name:"Búho"};
+function avBuilt(id){if(AVURL[id])return AVURL[id];const d=AV_DEFS.find(x=>x.id===id)||AV_DEFS[0];const c=avRender(d);return AVURL[d.id]={url:c.toDataURL(),acc:d.accent,emb:avEmblem(c),name:d.name}}
+function avLoad(){let o=null;try{o=JSON.parse(localStorage.getItem(AV_KEY)||"null")}catch(e){}
+  if(o&&o.id==="foto"&&typeof o.url==="string"&&o.url.indexOf("data:image/png")===0&&Array.isArray(o.emb)&&o.emb.length===25){AV={id:"foto",chosen:true,url:o.url,acc:/^#[0-9a-f]{6}$/i.test(o.acc||"")?o.acc:AK.gold,emb:o.emb.map(String),name:"Tu foto"};return}
+  const id=o&&AV_DEFS.some(d=>d.id===o.id)?o.id:null,b=avBuilt(id||"buho");AV={id:id||"buho",chosen:!!id,url:b.url,acc:b.acc,emb:b.emb,name:b.name}}
+function avPersist(){try{if(!AV.chosen)localStorage.removeItem(AV_KEY);else localStorage.setItem(AV_KEY,JSON.stringify(AV.id==="foto"?{id:"foto",url:AV.url,acc:AV.acc,emb:AV.emb}:{id:AV.id}));return true}catch(e){return false}}
+const avHTML=(url,acc,cls,alt)=>`<span class="avt ${cls||""}" style="--av:${esc(acc)}"><img src="${esc(url)}" alt="${esc(alt||"")}" width="24" height="24"><i class="tw t1"></i><i class="tw t2"></i><i class="tw t3"></i></span>`;
+function paintAvatars(){
+  const h=avHTML(AV.url,AV.acc,"",""),b=$("prof-av");if(b&&b.__h!==h){b.innerHTML=h;b.__h=h}
+  const big=$("fi-avimg");if(big){const h2=avHTML(AV.url,AV.acc,"big",AV.name);if(big.__h!==h2){big.innerHTML=h2;big.__h=h2}}
+  const gal=$("av-gal");if(gal)gal.querySelectorAll(".avopt").forEach(x=>x.setAttribute("aria-checked",String(AV.chosen&&x.dataset.av===AV.id)));
+  const cl=$("av-clear");if(cl)cl.hidden=AV.id!=="foto";
+  const up=$("av-up");if(up)up.setAttribute("aria-pressed",String(AV.id==="foto"));
+  const pb=$("prof-btn");if(pb)pb.title="Ficha del comandante · avatar: "+AV.name}
+function avApply(){AVCMD=AV.chosen?{acc:AV.acc,emb:AV.emb}:null;delete PORT.cmd;paintAvatars();try{renderChat();renderExp()}catch(e){}}
+function avPick(id){const b=avBuilt(id);AV={id,chosen:true,url:b.url,acc:b.acc,emb:b.emb,name:b.name};const ok=avPersist();avApply();return ok}
+function avReset(){AV.chosen=false;const b=avBuilt("buho");AV={id:"buho",chosen:false,url:b.url,acc:b.acc,emb:b.emb,name:b.name};avPersist();avApply()}
+/* foto → pixel art con la paleta de la app: recorte cuadrado, 20×20, contraste ajustado, tramado ordenado y marco místico */
+const AV_PAL=["#05061A","#0C1138","#1A1F52","#2C357C","#3A4699","#4B3FB0","#5B4FD0","#8F89E6","#B9B2FF","#C69CFF","#5AD1E8","#2B7FA8","#FFE9A6","#FFC15A","#B8862E","#FF9E6B","#FF7AA8","#E0AE85","#A36A4C","#6B3E3A","#7EE0A1","#2F8F6B","#F1EEFF","#A9B0E0"];
+const AV_PALRGB=AV_PAL.map(avHex),AV_VIVID=[10,13,15,16,20,9,7],BAYER=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+function avNearest(r,g,b){let bi=0,bd=1e12;for(let i=0;i<AV_PALRGB.length;i++){const p=AV_PALRGB[i],rm=(r+p[0])/2,dr=r-p[0],dg=g-p[1],db=b-p[2],d=(2+rm/256)*dr*dr+4*dg*dg+(2+(255-rm)/256)*db*db;if(d<bd){bd=d;bi=i}}return bi}
+function avPixelate(src,sw,sh){
+  const S=20,m=Math.min(sw,sh),sx=(sw-m)/2,sy=(sh-m)/2;
+  const w=document.createElement("canvas");w.width=w.height=S*4;const g=w.getContext("2d");g.fillStyle="#1A1F52";g.fillRect(0,0,S*4,S*4);g.imageSmoothingEnabled=true;g.imageSmoothingQuality="high";g.drawImage(src,sx,sy,m,m,0,0,S*4,S*4);
+  const w2=document.createElement("canvas");w2.width=w2.height=S;const g2=w2.getContext("2d");g2.imageSmoothingEnabled=true;g2.imageSmoothingQuality="high";g2.drawImage(w,0,0,S,S);
+  const im=g2.getImageData(0,0,S,S),d=im.data,L=[];
+  for(let i=0;i<S*S;i++)L.push(.299*d[i*4]+.587*d[i*4+1]+.114*d[i*4+2]);
+  const so=L.slice().sort((a,b)=>a-b),lo=so[Math.floor(S*S*.04)],hi=so[Math.floor(S*S*.96)],k=hi-lo>24?255/(hi-lo):1;
+  const out=document.createElement("canvas");out.width=out.height=AVN;AVG=out.getContext("2d");AVG.imageSmoothingEnabled=false;AVSYM=false;
+  AVG.fillStyle=AK.in1;AVG.fillRect(2,2,20,20);
+  const use=new Array(AV_PAL.length).fill(0),idx=[];
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){const i=y*S+x;let r=d[i*4],gg=d[i*4+1],b=d[i*4+2];const l=L[i],nl=Math.max(0,Math.min(255,(l-lo)*k)),f=l>2?nl/l:1;r*=f;gg*=f;b*=f;
+    const mu=(r+gg+b)/3;r=mu+(r-mu)*1.3;gg=mu+(gg-mu)*1.3;b=mu+(b-mu)*1.3;const t=(BAYER[(y%4)*4+x%4]-7.5)*3.4;
+    const j=avNearest(Math.max(0,Math.min(255,r+t)),Math.max(0,Math.min(255,gg+t)),Math.max(0,Math.min(255,b+t)));use[j]++;idx.push(j);AVG.fillStyle=AV_PAL[j];AVG.fillRect(2+x,2+y,1,1)}
+  let acc=AK.gold,bu=0;AV_VIVID.forEach(j=>{if(use[j]>bu){bu=use[j];acc=AV_PAL[j]}});
+  avFrame(acc);
+  const emb=[];for(let by=0;by<5;by++)for(let bx=0;bx<5;bx++){let r=0,gg=0,b=0;for(let y=0;y<4;y++)for(let x=0;x<4;x++){const p=AV_PALRGB[idx[(by*4+y)*S+bx*4+x]];r+=p[0];gg+=p[1];b+=p[2]}
+    const j=avNearest(r/16,gg/16,b/16);emb.push(AV_PAL[j])}
+  return{url:out.toDataURL("image/png"),acc,emb}}
+function avSetPhoto(res){AV={id:"foto",chosen:true,url:res.url,acc:res.acc,emb:res.emb,name:"Tu foto"};const ok=avPersist();avApply();return ok}
+
+/* =================== FICHA DEL COMANDANTE (ícono de perfil junto al engranaje) =================== */
+const CMD_DEFAULT="Comandante";
+const cmdName=()=>String(cfg().owner||"").trim()||CMD_DEFAULT;
+/* íconos de 7×7 para las estadísticas (pixel art en SVG) */
+const PXI={
+  racha:["...#...","..###..",".#####.",".##.###",".######","..####.","...##.."],
+  trofeo:["#.###.#","#######",".#####.",".#####.","..###..","...#...","..###.."],
+  check:[".......","......#",".....##","#...##.","##.##..",".###...","..#...."],
+  gema:["..###..",".#####.","#######",".#####.","..###..","...#...","......."],
+  bandera:["#####..","######.","#####..","#......","#......","#......","#......"],
+  espada:[".....##","....###","...###.","#.###..",".###...",".##....","#.#...."]};
+const pxSvg=rows=>`<svg viewBox="0 0 7 7" shape-rendering="crispEdges" aria-hidden="true" fill="currentColor">`+rows.map((r,y)=>[...r].map((c,x)=>c==="#"?`<rect x="${x}" y="${y}" width="1" height="1"/>`:"").join("")).join("")+`</svg>`;
+const FI_TILES=[["racha","Racha actual","cur","días seguidos","var(--gold)"],["trofeo","Mejor racha","best","días seguidos","var(--c5)"],["check","Días cumplidos","met","últimos 180 días","var(--c3)"],["gema","Habilidades probadas","skills","con evidencia","var(--c1)"],["bandera","Proyectos publicados","pubs","terminados","var(--c6)"],["espada","Misiones cumplidas","quests","misiones del día","var(--c4)"]];
+function fichaStats(){
+  const t=today(),keys=Object.keys(S.days).filter(s=>s<=t).sort();let best=0,run=0,met=0;
+  if(keys.length){let s=keys[0],guard=0;while(s<=t&&guard++<400){if(score(s).met){met++;run++;if(run>best)best=run}else run=0;s=addDays(s,1)}}
+  const cur=streak();
+  return{cur,best:Math.max(best,cur),met,skills:S.skills.filter(x=>x.level==="probada").length,pubs:S.projects.filter(p=>p.status==="done").length,quests:Object.values(S.quests).filter(q=>q.done).length}}
+
+/* ---------- preferencias: el rol de Claude vive en config (campo aiRole que ya existía); tono y horarios, solo en este navegador ---------- */
+const PREF_KEY="kasanov:prefs:v1";
+const TONES=[["directo","Directo y breve","Háblale directo y breve: sin rodeos ni sermones."],["calido","Cálido y alentador","Háblale con calidez y ánimo: reconoce primero lo que sí hizo y después propón."],["estricto","Estricto","Sé exigente: señala sin suavizar lo que no cumplió, pero sin culpabilizar."],["mitico","Mítico, en personaje","Habla en personaje, con el carácter mitológico de cada agente, sin perder claridad."]];
+const ROLES=[["Copiloto","copiloto con explicación"],["Maestro","maestro: me guía con preguntas y pistas, sin escribirme el código"],["Ejecutor","ejecutor: escribe el código y me resume qué hizo"],["Revisor","revisor: solo revisa y critica lo que yo escribo"]];
+let PREFS={tone:"",toneNote:"",study:"",close:""},PRT=null;
+function prefsLoad(){try{const o=JSON.parse(localStorage.getItem(PREF_KEY)||"{}")||{};["tone","toneNote","study","close"].forEach(k=>{if(typeof o[k]==="string")PREFS[k]=o[k].slice(0,200)});if(!TONES.some(t=>t[0]===PREFS.tone))PREFS.tone=""}catch(e){}}
+function prefsSaveLocal(){try{localStorage.setItem(PREF_KEY,JSON.stringify(PREFS));return true}catch(e){return false}}
+function prefsText(){const o=[],t=TONES.find(x=>x[0]===PREFS.tone);if(t)o.push("- Tono: "+t[2]);if(PREFS.toneNote.trim())o.push("- Sobre cómo hablarle: "+PREFS.toneNote.trim());
+  const h=[PREFS.study.trim()?"su mejor franja para estudiar o construir es "+PREFS.study.trim():"",PREFS.close.trim()?"cierra el día a las "+PREFS.close.trim():""].filter(Boolean);
+  if(h.length)o.push("- Horarios: "+h.join("; ")+". Respétalos al asignar horas.");
+  return o.length?"\n\nPREFERENCIAS DEL COMANDANTE (cómo quiere que le hablen y cuándo):\n"+o.join("\n"):""}
+function renderPrefs(){
+  const cur=PRT===null?PREFS.tone:PRT;
+  $("pr-tone").querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.tone===cur)));
+  const set=(id,v)=>{const x=$(id);if(document.activeElement!==x&&!x.dataset.dirty&&x.value!==v)x.value=v};
+  set("pr-note",PREFS.toneNote);set("pr-study",PREFS.study);set("pr-close",PREFS.close);set("pr-role",cfg().aiRole||"");
+  const tl=(TONES.find(t=>t[0]===PREFS.tone)||[])[1];
+  $("fi-s-prefs").textContent=(tl?"Tono: "+tl:"Tono sin definir")+" · Rol de Claude: "+(()=>{const a=String(cfg().aiRole||"copiloto con explicación"),r=ROLES.find(x=>a.toLowerCase().startsWith(x[0].toLowerCase()));return r?r[0]:short(a,34)})()}
+$("pr-tone").innerHTML=TONES.map(t=>`<button type="button" data-tone="${t[0]}" aria-pressed="false">${esc(t[1])}</button>`).join("");
+$("pr-roles").innerHTML=ROLES.map(r=>`<button type="button" class="chip" data-role="${esc(r[1])}">${esc(r[0])}</button>`).join("");
+$("pr-tone").addEventListener("click",e=>{const b=e.target.closest("button[data-tone]");if(!b)return;const cur=PRT===null?PREFS.tone:PRT;PRT=cur===b.dataset.tone?"":b.dataset.tone;$("pr-st").textContent="Cambios sin guardar";renderPrefs()});
+$("pr-roles").addEventListener("click",e=>{const b=e.target.closest("button[data-role]");if(!b)return;const x=$("pr-role");x.value=b.dataset.role;x.dataset.dirty="1";$("pr-st").textContent="Cambios sin guardar"});
+["pr-note","pr-study","pr-close","pr-role"].forEach(id=>$(id).addEventListener("input",e=>{e.target.dataset.dirty="1";$("pr-st").textContent="Cambios sin guardar"}));
+$("pr-save").onclick=()=>{
+  if(PRT!==null)PREFS.tone=PRT;PRT=null;PREFS.toneNote=$("pr-note").value.trim().slice(0,200);PREFS.study=$("pr-study").value.trim().slice(0,200);PREFS.close=$("pr-close").value.trim().slice(0,200);
+  ["pr-note","pr-study","pr-close"].forEach(id=>delete $(id).dataset.dirty);
+  const okLocal=prefsSaveLocal(),role=$("pr-role").value.trim().slice(0,240);let p=Promise.resolve(true);
+  if($("pr-role").dataset.dirty){
+    if(!S.config){toast("La configuración aún no carga: el rol de Claude no se guardó.")}
+    else if(role!==(S.config.aiRole||"")){const nc=Object.assign({},S.config,{updated:nowISO()});if(role)nc.aiRole=role;else delete nc.aiRole;S.config=nc;p=save("config/main",nc);delete $("pr-role").dataset.dirty}
+    else delete $("pr-role").dataset.dirty}
+  $("pr-st").textContent="Guardando…";
+  p.then(ok=>{$("pr-st").textContent=!ok?"No se pudo guardar el rol de Claude.":okLocal?"Guardado. Los agentes lo usan desde su próximo mensaje.":"El rol se guardó, pero este navegador no permitió guardar tono y horarios."});
+  renderPrefs()};
+
+/* ---------- apertura, cierre y secciones desplegables ---------- */
+let FIFROM=null;const FI_OPEN={perfil:false,prefs:false,habitos:false,gh:false};
+function renderFichaFolds(){Object.keys(FI_OPEN).forEach(k=>{const o=FI_OPEN[k];$("fi-h-"+k).setAttribute("aria-expanded",String(o));$("fi-b-"+k).hidden=!o})}
+function renderProfBtn(){const n=profOf().pending.length,b=$("prof-n");b.hidden=!n;b.textContent=n;$("prof-btn").setAttribute("aria-label","Ficha del comandante"+(n?" · "+n+" patrón"+(n===1?"":"es")+" por revisar":""))}
+function renderFicha(){
+  const xp=xpTotal(),lv=lvlOf(xp),lo=25*(lv-1)**2,hi=25*lv**2;
+  $("fi-name").textContent=cmdName();$("fi-rank").textContent=rankOf(lv);$("fi-lv").textContent="Nv "+lv;
+  $("fi-xp").textContent=xp+" XP · faltan "+(hi-xp)+" para Nv "+(lv+1);$("fi-xpbar").style.width=Math.round(100*(xp-lo)/(hi-lo))+"%";
+  const st=fichaStats(),h=FI_TILES.map(t=>`<div class="st" style="--ic:${t[4]}"><span class="si">${pxSvg(PXI[t[0]])}</span><div class="sx"><span class="sl">${t[1]}</span><b class="sv">${st[t[2]]}</b><span class="ss">${t[3]}</span></div></div>`).join("");
+  const el=$("fi-stats");if(el.__h!==h){el.innerHTML=h;el.__h=h}
+  paintAvatars();renderFichaFolds();renderPerfil();renderPrefs();renderHabitos();renderGh();
+  const c=cfg();$("fi-s-habitos").textContent=(c.habits||[]).length+" hábitos · "+(c.bonus||[]).length+" bonus"}
+function openFicha(sec){const b=$("fi-back");if(b.hidden)FIFROM=document.activeElement;if(sec&&sec in FI_OPEN)FI_OPEN[sec]=true;b.hidden=false;$("fi-avpick").hidden=true;renderFicha();
+  setTimeout(()=>{try{if(sec&&FI_OPEN[sec]){const f=$("fi-f-"+sec);if(f&&f.scrollIntoView)f.scrollIntoView({block:"nearest"})}$("fi-close").focus({preventScroll:true})}catch(e){}},30)}
+function closeFicha(){const b=$("fi-back");if(b.hidden)return;b.hidden=true;try{if(FIFROM&&document.body.contains(FIFROM)&&FIFROM.focus)FIFROM.focus({preventScroll:true})}catch(e){}FIFROM=null}
+$("prof-btn").onclick=()=>openFicha();
+$("fi-close").onclick=closeFicha;
+$("fi-back").addEventListener("mousedown",e=>{if(e.target===$("fi-back"))closeFicha()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeFicha()});
+$("fi-folds").addEventListener("click",e=>{const b=e.target.closest(".fold-h");if(!b)return;const k=b.dataset.f;FI_OPEN[k]=!FI_OPEN[k];renderFichaFolds()});
+
+/* ---------- galería de avatares y foto propia ---------- */
+$("av-gal").innerHTML=AV_DEFS.map(d=>{const b=avBuilt(d.id);return `<button type="button" class="avopt" role="radio" aria-checked="false" data-av="${d.id}" title="${esc(d.name)}">${avHTML(b.url,b.acc,"med",d.name)}<span class="avn">${esc(d.name)}</span></button>`}).join("");
+$("av-gal").addEventListener("click",e=>{const b=e.target.closest(".avopt");if(!b)return;const ok=avPick(b.dataset.av);$("av-msg").textContent=ok?"Avatar guardado en este navegador.":"Se aplicó, pero este navegador no permitió guardarlo."});
+$("fi-av").onclick=()=>{const p=$("fi-avpick");p.hidden=!p.hidden;$("fi-av").setAttribute("aria-expanded",String(!p.hidden));if(!p.hidden)try{p.scrollIntoView({block:"nearest"})}catch(e){}};
+$("av-close").onclick=()=>{$("fi-avpick").hidden=true;$("fi-av").setAttribute("aria-expanded","false")};
+$("av-up").onclick=()=>$("av-file").click();
+$("av-clear").onclick=()=>{avReset();$("av-msg").textContent="Foto quitada."};
+async function avFile(f){const m=$("av-msg");if(!f)return;
+  if(!/^image\//.test(f.type||"")){m.textContent="Ese archivo no es una imagen.";return}
+  if(f.size>20e6){m.textContent="La imagen pesa más de 20 MB; elige una más ligera.";return}
+  m.textContent="Convirtiendo a pixel art…";
+  try{let src=null,w=0,h=0,rel=null;
+    if(window.createImageBitmap){try{src=await createImageBitmap(f);w=src.width;h=src.height;rel=()=>{try{src.close()}catch(e){}}}catch(e){src=null}}
+    if(!src){const u=URL.createObjectURL(f);try{src=await new Promise((ok,no)=>{const im=new Image();im.onload=()=>ok(im);im.onerror=()=>no(new Error("no se pudo decodificar"));im.src=u});w=src.naturalWidth;h=src.naturalHeight}finally{URL.revokeObjectURL(u)}}
+    if(!w||!h)throw new Error("imagen vacía");
+    const res=avPixelate(src,w,h);if(rel)rel();const ok=avSetPhoto(res);
+    m.textContent=ok?"Listo: tu foto quedó como avatar y solo vive en este navegador (la original no se guarda).":"Tu foto se aplicó, pero este navegador no permitió guardarla: al recargar volverá el avatar anterior."}
+  catch(e){m.textContent="No se pudo leer esa imagen ("+(e&&e.message||"error")+"). Prueba con un JPG o PNG."}}
+$("av-file").addEventListener("change",e=>{const f=e.target.files&&e.target.files[0];e.target.value="";avFile(f)});
+const avp=$("fi-avpick");["dragenter","dragover"].forEach(t=>avp.addEventListener(t,e=>{e.preventDefault();avp.classList.add("drop")}));
+["dragleave","drop"].forEach(t=>avp.addEventListener(t,e=>{e.preventDefault();avp.classList.remove("drop")}));
+avp.addEventListener("drop",e=>{const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];avFile(f)});
+
+prefsLoad();avLoad();avApply();
 /* =================== PERSONAL: HOY =================== */
 /* Dos secciones desplegables: Actividades del día y Bitácora. Lo que cambias es un borrador en memoria
    hasta que pulsas Guardar; entonces se escriben los mismos campos de siempre en days/{fecha}. */
@@ -2181,13 +2626,9 @@ function renderReview(){
 }
 $("w-review-pick").onchange=renderReview;
 function renderMejoras(){
-  const gt=$("goal-text");if(document.activeElement!==gt&&!gt.dataset.dirty)gt.value=cfg().goal||"";
   $("s-log").innerHTML=S.changelog.length?S.changelog.slice(0,15).map(l=>`<div class="row" style="align-items:baseline;gap:10px;flex-wrap:nowrap"><span class="muted" style="font-size:.8rem;flex:0 0 auto;font-variant-numeric:tabular-nums">${esc(l.date||"")}</span><span style="min-width:0">${T(l.text)}</span></div>`).join(""):`<div class="empty">Sin cambios registrados.</div>`;
   $("q-list").innerHTML=S.requests.slice(0,15).map(r=>`<div class="pcard"><div class="row between"><span class="muted" style="font-size:.8rem">${esc((r.created||"").slice(0,10))}</span><span class="chip ${r.status==="atendido"?"ok":r.status==="en curso"?"warn":""}">${esc(r.status||"nuevo")}</span></div><div style="overflow-wrap:anywhere">${T(r.text)}</div>${r.response?`<div class="muted" style="font-size:.88rem;border-top:1px dashed var(--line);padding-top:6px">Respuesta: ${T(r.response)}</div>`:""}</div>`).join("");
 }
-$("goal-text").addEventListener("input",e=>e.target.dataset.dirty="1");
-$("goal-save").onclick=()=>{if(!S.config){toast("La configuración aún no carga.");return}const g=$("goal-text").value.trim();if(!g)return;delete $("goal-text").dataset.dirty;$("goal-state").textContent="Guardando…";
-  save("config/main",Object.assign({},S.config,{goal:g,updated:nowISO()})).then(()=>{$("goal-state").textContent="Guardada";save("changelog/l"+Date.now().toString(36),{date:today(),text:"Meta actualizada: "+short(g,140)})})};
 $("qf").addEventListener("submit",e=>{e.preventDefault();const t=$("qf-text").value.trim();if(!t)return;save("requests/q"+Date.now().toString(36),{text:t,status:"nuevo",created:nowISO()}).then(()=>toast("Enviado: Auditoría lo atiende en la próxima revisión"));$("qf-text").value=""});
 function renderEscuadron(){$("s-depts").innerHTML=depts().length?depts().map(d=>agentCard(d,false)).join(""):`<div class="empty">Sin departamentos.</div>`}
 
@@ -2196,21 +2637,16 @@ const RT=window.KASANOV_RUNTIME;
 function renderAjustes(){
   const st=RT.getSettings();const k=$("aj-key");if(document.activeElement!==k&&!k.dataset.dirty)k.value=st.apiKey;
   ["quick","default","complex"].forEach(t=>{const el=$("aj-m-"+t);if(document.activeElement!==el&&!el.dataset.dirty)el.value=st.models[t]});
-  const c=cfg();const o=$("aj-owner"),x=$("aj-context");
-  if(document.activeElement!==o&&!o.dataset.dirty)o.value=c.owner||"";
-  if(document.activeElement!==x&&!x.dataset.dirty)x.value=c.context||"";
   const ks=$("aj-keystate");ks.textContent=st.apiKey?"Agentes activos":"Agentes apagados";ks.className="chip "+(st.apiKey?"ok":"warn");
   if(!RT.storageOK())$("aj-dstate").textContent="Este navegador bloquea el almacenamiento local: tus datos se perderán al cerrar la pestaña.";
 }
-["aj-key","aj-m-quick","aj-m-default","aj-m-complex","aj-owner","aj-context"].forEach(id=>$(id).addEventListener("input",e=>e.target.dataset.dirty="1"));
+["aj-key","aj-m-quick","aj-m-default","aj-m-complex"].forEach(id=>$(id).addEventListener("input",e=>e.target.dataset.dirty="1"));
 const ajModels=()=>({quick:$("aj-m-quick").value.trim()||RT.DEFAULT_MODELS.quick,default:$("aj-m-default").value.trim()||RT.DEFAULT_MODELS.default,complex:$("aj-m-complex").value.trim()||RT.DEFAULT_MODELS.complex});
 $("aj-save").onclick=()=>{try{RT.setSettings({apiKey:$("aj-key").value,models:ajModels()});$("aj-state").textContent="Guardado. Recargando…";setTimeout(()=>location.reload(),400)}catch(e){$("aj-state").textContent=e.message}};
 $("aj-test").onclick=async()=>{const b=$("aj-test");const key=$("aj-key").value.trim();if(!key){$("aj-state").textContent="Pega tu API key primero.";return}
   b.disabled=true;$("aj-state").textContent="Probando…";
   try{await RT.test(key,ajModels().quick);$("aj-state").textContent="Conexión correcta. Guarda para activar a los agentes."}
   catch(e){$("aj-state").textContent=errCopy(e)}finally{b.disabled=false}};
-$("aj-profile-save").onclick=()=>{if(!S.config)return;const o=$("aj-owner").value.trim(),x=$("aj-context").value.trim();delete $("aj-owner").dataset.dirty;delete $("aj-context").dataset.dirty;$("aj-pstate").textContent="Guardando…";
-  save("config/main",Object.assign({},S.config,{owner:o,context:x,updated:nowISO()})).then(()=>{$("aj-pstate").textContent="Guardado"})};
 $("aj-export").onclick=()=>{const blob=new Blob([RT.exportJSON()],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="sistema-kasanov-respaldo-"+today()+".json";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},800);$("aj-dstate").textContent="Respaldo descargado."};
 $("aj-import-btn").onclick=()=>$("aj-import").click();
 $("aj-import").addEventListener("change",e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();
@@ -2225,11 +2661,13 @@ function renderAll(){
   $("weekpill").textContent=isoWeek(today())+" · semana "+(weekIndex(today())+1)+" del sistema";
   ensureLayout();
   const v=VIEW;
-  if(v==="nexo")renderNexo();if(v==="hoy")renderHoy();if(v==="semana")renderSemana();if(v==="habitos")renderHabitos();
+  if(v==="nexo")renderNexo();if(v==="hoy")renderHoy();if(v==="semana")renderSemana();
   if(v==="proyectos")renderProyectos();if(v==="habilidades")renderHabilidades();if(v==="repaso")renderRepaso();if(v==="finanzas")renderFinanzas();
   try{renderInbox()}catch(e){}
   try{renderChat();renderExp()}catch(e){}
-  if(groupOf(v)==="sistema")renderForce();if(v==="revisiones")renderReview();if(v==="mejoras")renderMejoras();if(v==="escuadron")renderEscuadron();if(v==="ajustes")renderAjustes();if(v==="ajustes"){renderPerfil();renderGh()}
+  if(groupOf(v)==="sistema")renderForce();if(v==="revisiones")renderReview();if(v==="mejoras")renderMejoras();if(v==="escuadron")renderEscuadron();if(v==="ajustes")renderAjustes();
+  try{renderProfBtn()}catch(e){}
+  if(!$("fi-back").hidden)renderFicha();
 }
 paintHide();
 show(start);
