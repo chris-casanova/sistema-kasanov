@@ -47,7 +47,7 @@ function setHide(v){HIDE=v;try{localStorage.setItem("hide$",v?"1":"0")}catch(e){
 $("money-toggle").onclick=()=>setHide(!HIDE);$("money-toggle2").onclick=()=>setHide(!HIDE);
 
 /* ---------- navegación por áreas ---------- */
-const GROUPS={nexo:["nexo"],personal:["hoy","semana"],trabajo:["proyectos","habilidades","repaso"],finanzas:["finanzas"],sistema:["revisiones","mejoras","escuadron","ajustes"]};
+const GROUPS={nexo:["nexo"],personal:["hoy","semana","entreno"],trabajo:["proyectos","habilidades","repaso"],finanzas:["finanzas"],sistema:["revisiones","mejoras","escuadron","diagnostico","ajustes"]};
 const ALLV=Object.values(GROUPS).flat();
 const groupOf=v=>Object.keys(GROUPS).find(g=>GROUPS[g].includes(v))||"nexo";
 const tabs=[...document.querySelectorAll("nav.tabs button")];
@@ -910,8 +910,8 @@ function skillsLine(lv){return S.skills.filter(s=>(s.level||"sinprobar")===lv).m
 const BASE_=()=>{const c=cfg();return "Trabajas para "+(c.owner||"el comandante, la persona que usa este sistema")+". Su meta: "+(c.goal||"todavía no la define; ayúdale a aclararla")+"."+(c.context?" Contexto que él mismo escribió: "+c.context:"")+" No lo encasilles en ningún rol: su camino profesional se descubre con evidencia. Cuenta como habilidad solo lo PROBADO o EN PRÁCTICA según su inventario; lo SIN PROBAR es hipótesis y nunca lo presentes como habilidad ni como el camino obvio. Escribe en español, directo, concreto y amable; nunca culpabilizante. No inventes datos que no estén en el contexto."};
 const WHO=()=>cfg().owner||"el comandante";
 function plannerPrompt(text,dl,all,opts){
-  return BASEP()+"\n\nEres NEXO, el orquestador del centro de mando, encarnado en Odín. Tu carácter: "+TRAITS.nexo+" Que se note un poco en el tono de \"why\", sin perder claridad.\nNo ves los datos crudos de "+WHO()+": solo el Tablero de estado y los despachos de tu escuadrón.\nDepartamentos disponibles (entre paréntesis, la figura que los encarna y sus únicas fuentes):\n"+dl.map(d=>"- "+d.id+": "+d.name+" ("+gn(d)+"; fuentes: "+(SRCN[d.id]||"su área")+"). "+d.mission).join("\n")+
-  "\n\nOrden de "+WHO()+": \""+text+"\"\n\n"+boardText()+
+  return BASEP()+"\n\nEres NEXO, el orquestador del centro de mando, encarnado en Odín. Tu carácter: "+TRAITS.nexo+" Que se note un poco en el tono de \"why\", sin perder claridad.\nVes el Tablero de estado, los despachos de tu escuadrón y un resumen mínimo de los datos de "+WHO()+" (respaldo). El detalle de cada área lo trae su agente: por eso los convocas.\nDepartamentos disponibles (entre paréntesis, la figura que los encarna y sus únicas fuentes):\n"+dl.map(d=>"- "+d.id+": "+d.name+" ("+gn(d)+"; fuentes: "+(SRCN[d.id]||"su área")+"). "+d.mission).join("\n")+
+  "\n\nOrden de "+WHO()+": \""+text+"\"\n\n"+sourcesFor("nexo")+
   (dl.some(d=>d.id==="finanzas")?"\n\nRegla: si la orden implica dinero, compras, ingresos, tiempo de trabajo o una decisión personal, incluye al departamento finanzas.":"")+(opts&&opts.lead?"\nEsta orden es una DECISIÓN que "+WHO()+" quiere tomar. El primer departamento debe ser "+opts.lead+"; agrega 1 o 2 más solo si aportan otra perspectiva.":"")+
   (all||(opts&&(opts.lead||opts.review))?"":"\n\nPrimero: si la orden es sobre todo para REGISTRAR algo que "+WHO()+" ya hizo (un avance, un commit, un repo subido, un proyecto nuevo, algo que aprendió, un hábito cumplido) y no pide análisis, consejo ni plan, responde solo {\"mode\":\"registro\"} y nada más.")+
   "\n\nDecide qué departamentos intervienen"+(all?" (en esta orden participan TODOS)":" (1 a 3, solo los necesarios)")+". El orden de trabajo es fijo (Heracles → Moneta → Jano → Atenea → Hefesto) y tú cierras: cada uno lee los despachos anteriores. Responde solo con JSON: {\"title\":\"título de la misión, máx 6 palabras\",\"why\":\"una frase sobre el plan\",\"plan\":[{\"dept\":\"id\",\"task\":\"instrucción concreta, máx 25 palabras\"}]}";
@@ -920,27 +920,27 @@ function agentPrompt(d,task,text,prior,src,proposed,cap,noap){
   const th=threadOf(d.id);
   return BASEP()+"\nRol de Claude en sus proyectos de código: "+(cfg().aiRole||"copiloto con explicación")+
   "\n\nEres el agente del departamento "+d.name+(gn(d)!==d.name?", encarnado en "+gn(d):"")+". Tu misión permanente: "+d.mission+(TRAITS[d.id]?"\nTu carácter: "+TRAITS[d.id]+" Que se note un poco en el tono, sin perder claridad.":"")+
-  exText(d.id)+
+  exText(d.id)+(d.id==="habitos"?EN_COACH:"")+
   "\n\nOrden original de "+WHO()+": \""+text+"\"\nTu tarea asignada por Odín: "+task+
   "\nTus FUENTES son solo las de abajo ("+(SRCN[d.id]||"tu área")+"). No ves nada más: si algo no está en ellas, no lo sabes; no lo inventes. No le hagas preguntas a "+WHO()+" salvo una, en el campo pregunta, y solo si de verdad falta un dato para decidir."+
   "\n\n"+dossierText(d.id)+
   (th.summary?"\n\nRESUMEN DE TU HILO CON "+WHO()+": "+th.summary:"")+
   (prior.length?"\n\nDESPACHOS ANTERIORES DE ESTA MISIÓN (léelos y construye sobre ellos; no los repitas):\n"+prior.map(despLine).join("\n"):"")+
   (proposed&&proposed.length?"\n\nYa se propuso en esta misión (NO repitas ni reformules estas propuestas; si no tienes algo distinto, deja proposals vacío):\n"+proposed.map(s=>"- "+s).join("\n"):"")+
-  "\n\nFUENTES\n"+src+
+  "\n\nFUENTES\n"+srcHeader(d.id)+emptyRule(d.id)+"\n"+src+
   "\n\nAUTORREVISIÓN (hazla en silencio antes de responder; no la menciones): 1) ¿la evidencia cita un dato concreto que aparece en tus FUENTES? 2) ¿la duración cabe en la capacidad de hoy"+(cap&&cap.min?" ("+cap.min+" min, según "+(cap.from||"Heracles")+")":cap&&cap.level?" (capacidad "+cap.level+", según "+(cap.from||"el Tablero")+")":d.id==="habitos"?" (tú la defines en capacidad)":" (sin dato de capacidad: sé conservador)")+"? 3) ¿dice cómo sabrá "+WHO()+" que terminó? 4) ¿no repite algo que "+WHO()+" marcó como «No aplica»"+(noap&&noap.length?" ("+noap.map(x=>short(x,90)).join("; ")+")":"")+"? Si falla una, corrígela antes de responder."+
-  "\n\nEntrega tu DESPACHO. Responde solo con JSON: {\"hallazgo\":\"lo más importante que ves en tu área, máx 160 caracteres\",\"evidencia\":\"el dato concreto de tus FUENTES que lo sostiene (cifra, fecha, nombre o cita corta), máx 200 caracteres; si no citas un dato concreto, Odín descarta tu despacho\",\"recomendacion\":{\"accion\":\"qué hacer, concreta, máx 140 caracteres\",\"duracion\":\"cuánto toma, ej. 25 min\",\"terminado\":\"criterio observable de terminado, máx 110 caracteres\"},\"confianza\":\"alta|media|baja\",\"para\":{\"agente\":\"id del destinatario: habitos|finanzas|carrera|aprendizaje|sistema|nexo\",\"porque\":\"por qué le sirve, máx 110 caracteres\"},\"pregunta\":\"opcional: una pregunta a "+WHO()+" solo si falta un dato clave; si no, cadena vacía\","+(d.id==="habitos"?"\"capacidad\":{\"nivel\":\"alta|media|baja\",\"minutos\":minutos realistas disponibles hoy para TODO lo que recomiende el escuadrón (número)},":"")+"\"sobre_ti\":[\"0 a 2 hechos duraderos de "+WHO()+" en tu área que tus fuentes muestran y aún no están en tu expediente\"],\"patron\":null o {\"texto\":\"un patrón de conducta que se repite en tus fuentes y no está en el perfil, máx 100 caracteres\",\"evidencia\":\"dato concreto\"},\"detalle\":\"opcional: desarrollo en viñetas con '- ', máx 500 caracteres\",\"proposals\":[...]}. Propuestas opcionales (máx 4, solo si aportan), cada una de un tipo: {\"type\":\"card\",\"front\":\"pregunta\",\"back\":\"respuesta\",\"topic\":\"tema\"} | {\"type\":\"project\",\"title\":\"...\",\"area\":\"Portafolio|Negocio|Aprendizaje|Creativo\",\"stack\":\"herramientas que de verdad usa o practica\",\"goal\":\"qué demuestra o para qué sirve\"} | {\"type\":\"skill\",\"name\":\"habilidad\",\"level\":\"probada|practica|sinprobar\",\"evidence\":\"evidencia concreta tomada de tus fuentes\"} (skill solo si tus fuentes muestran evidencia nueva). No dupliques tarjetas, proyectos ni habilidades existentes.";
+  "\n\nEntrega tu DESPACHO. Responde solo con JSON: {\"hallazgo\":\"lo más importante que ves en tu área, máx 160 caracteres\",\"evidencia\":\"el dato concreto de tus FUENTES que lo sostiene (cifra, fecha, nombre o cita corta), máx 200 caracteres; si no citas un dato concreto, Odín descarta tu despacho\",\"recomendacion\":{\"accion\":\"qué hacer, concreta, máx 140 caracteres\",\"duracion\":\"cuánto toma, ej. 25 min\",\"terminado\":\"criterio observable de terminado, máx 110 caracteres\"},\"confianza\":\"alta|media|baja\",\"para\":{\"agente\":\"id del destinatario: habitos|finanzas|carrera|aprendizaje|sistema|nexo\",\"porque\":\"por qué le sirve, máx 110 caracteres\"},\"pregunta\":\"opcional: una pregunta a "+WHO()+" solo si falta un dato clave; si no, cadena vacía\",\"faltan\":[\"0 a 3 datos concretos que "+WHO()+" aún no ha registrado y que necesitas; vacío si tienes lo necesario\"],"+(d.id==="habitos"?"\"capacidad\":{\"nivel\":\"alta|media|baja\",\"minutos\":minutos realistas disponibles hoy para TODO lo que recomiende el escuadrón (número)},":"")+"\"sobre_ti\":[\"0 a 2 hechos duraderos de "+WHO()+" en tu área que tus fuentes muestran y aún no están en tu expediente\"],\"patron\":null o {\"texto\":\"un patrón de conducta que se repite en tus fuentes y no está en el perfil, máx 100 caracteres\",\"evidencia\":\"dato concreto\"},\"detalle\":\"opcional: desarrollo en viñetas con '- ', máx 500 caracteres\",\"proposals\":[...]}. Propuestas opcionales (máx 4, solo si aportan), cada una de un tipo: {\"type\":\"card\",\"front\":\"pregunta\",\"back\":\"respuesta\",\"topic\":\"tema\"} | {\"type\":\"project\",\"title\":\"...\",\"area\":\"Portafolio|Negocio|Aprendizaje|Creativo\",\"stack\":\"herramientas que de verdad usa o practica\",\"goal\":\"qué demuestra o para qué sirve\"} | {\"type\":\"skill\",\"name\":\"habilidad\",\"level\":\"probada|practica|sinprobar\",\"evidence\":\"evidencia concreta tomada de tus fuentes\"} (skill solo si tus fuentes muestran evidencia nueva). No dupliques tarjetas, proyectos ni habilidades existentes.";
 }
 function synthPrompt(text,acc,rej,opts,stuck,stats){
   const now=new Date(),dec=opts&&opts.decision;
   return BASEP()+"\n\nEres NEXO, encarnado en Odín. Tu carácter: "+TRAITS.nexo+" Que se note un poco en el tono del resumen, sin perder claridad ni números."+
   "\nIntegra los despachos de tu escuadrón para la orden de "+WHO()+": \""+text+"\""+
-  "\nSolo ves los DESPACHOS y el TABLERO DE ESTADO; no ves los datos crudos. Hora local: "+pad(now.getHours())+":"+pad(now.getMinutes())+" del "+today()+" ("+pretty(today())+")."+
+  "\nVes los DESPACHOS, el TABLERO DE ESTADO y un RESUMEN MÍNIMO de sus datos como respaldo; no ves el detalle de cada área. Hora local: "+pad(now.getHours())+":"+pad(now.getMinutes())+" del "+today()+" ("+pretty(today())+")."+
   exText("nexo")+
   "\n\nDESPACHOS (en el orden en que se entregaron):\n"+acc.map(despLine).join("\n")+
   (rej.length?"\n\nDESCARTADOS AUTOMÁTICAMENTE por no citar un dato concreto (no los uses para decidir):\n"+rej.map(o=>"- ["+o.agent+"] "+nameOf(o.agent)+": "+(o.hallazgo||"sin hallazgo")+" ("+o.motivo+")").join("\n"):"")+
-  "\n\n"+boardText()+
-  "\n\nReglas:\n1) Rechaza toda recomendación cuya evidencia no sea un dato concreto: ponla en descartados con el motivo y no la uses.\n2) Da de 1 a 3 acciones para hoy, cada una con hora sugerida (HH:MM), criterio de terminado y basado_en (ids de los despachos que la sostienen). Respeta las restricciones del perfil y nunca recomiendes lo que el perfil dice que NO quiere.\n3) Si dos despachos chocan (tiempo, dinero, energía o prioridad), explica en conflicto cómo lo resolviste y por qué; si no hay choque, cadena vacía.\n4) Actualiza el Tablero de estado: capacidad de hoy (alta|media|baja y por qué), urgencia, dirección, huecos (datos que faltan y preguntas abiertas de los despachos) y misión del día (concreta y medible)."+
+  "\n\n"+sourcesFor("nexo")+
+  "\n\nReglas:\n1) Rechaza toda recomendación cuya evidencia no sea un dato concreto: ponla en descartados con el motivo y no la uses.\n2) Da de 1 a 3 acciones para hoy, cada una con hora sugerida (HH:MM), criterio de terminado y basado_en (ids de los despachos que la sostienen). Respeta las restricciones del perfil y nunca recomiendes lo que el perfil dice que NO quiere.\n3) Si dos despachos chocan (tiempo, dinero, energía o prioridad), explica en conflicto cómo lo resolviste y por qué; si no hay choque, cadena vacía.\n4) Actualiza el Tablero de estado: capacidad de hoy (alta|media|baja y por qué), urgencia, dirección, huecos (datos que faltan y preguntas abiertas de los despachos) y misión del día (concreta y medible).\n8) Un despacho marcado SIN DATOS significa que "+WHO()+" aún no registró nada en esa área: no inventes por ese agente. NUNCA digas «no hay datos» como resumen: arma el Tablero con lo que sí hay (despachos con datos y el RESUMEN MÍNIMO), pon en huecos cada dato que falta con la pregunta concreta, y si ninguna acción es posible, la acción de hoy es registrar ese dato (con hora y criterio de terminado)."+
   (stuck&&stuck.length?"\n5) Estas misiones ya fallaron dos o más veces porque "+WHO()+" no supo cómo: "+stuck.map(x=>"«"+x.text+"»").join("; ")+". No las repitas: si siguen siendo prioridad, divídelas en 2 a 4 pasos chicos (máx 25 min cada uno) en mision_pasos y pon como misión del día solo el primer paso.":"")+
   (stats&&stats.lines?"\n6) Es la REVISIÓN SEMANAL. Resultados por agente en 7 días (según las calificaciones de "+WHO()+" y las misiones cumplidas):\n"+stats.lines+"\nEn summary di qué agente tuvo más recomendaciones útiles y cumplidas"+(stats.best?" ("+nameOf(stats.best)+")":"")+" y por qué, con los números.":"")+
   (dec?"\n7) Es una DECISIÓN: da un veredicto explícito con base en los números.":"")+
@@ -965,7 +965,7 @@ function isDup(n,list){
   if(n.type==="card"&&S.cards.some(c=>overlap(c.front,key)>=.6))return true;
   if(n.type==="project"&&S.projects.some(p=>overlap(p.title,key)>=.6))return true;
   return list.some(x=>x.type===n.type&&overlap(x.type==="card"?x.front:x.title,key)>=.6)}
-function setBusy(on,label){running=on;$("scene-wrap").classList.toggle("mission",!!on);if(!on)setParty([]);$("c-run").disabled=on||sampleOff;$("c-log").disabled=on||sampleOff;$("c-send").disabled=on||sampleOff;$("c-stop").hidden=!on;$("mbar").hidden=!on;$("mbar-t").textContent=on?(label||"En misión"):"";document.querySelectorAll("#quick button").forEach(b=>b.disabled=on||sampleOff);
+function setBusy(on,label){running=on;$("scene-wrap").classList.toggle("mission",!!on);if(!on)setParty([]);$("c-ask").disabled=on||sampleOff;$("c-log").disabled=on||sampleOff;$("c-send").disabled=on||sampleOff;$("c-stop").hidden=!on;$("mbar").hidden=!on;$("mbar-t").textContent=on?(label||"En misión"):"";document.querySelectorAll("#quick button").forEach(b=>b.disabled=on||sampleOff);
   const st=$("c-state");st.className="chip "+(on?"ok":"");st.textContent=on?(label||"En misión"):"En espera";PHASE=on?(label||""):"";
   $("c-msg").innerHTML=on?`<div class="thinking"><i></i><i></i><i></i><span>${esc(label||"Trabajando")}</span></div>`:$("c-msg").innerHTML;renderRoster()}
 function setPhase(t){if(!running)return;PHASE=t;$("c-state").textContent=t;$("mbar-t").textContent=t;$("c-msg").innerHTML=`<div class="thinking"><i></i><i></i><i></i><span>${esc(t)}</span></div>`;renderSummary()}
@@ -978,7 +978,8 @@ async function runMission(text,target,all,opts){
   stopFlag=false;SC.token++;setBusy(true,"Odín analiza la orden");
   const recall=recallAll(true);
   const mid="m"+Date.now().toString(36);
-  const M={title:short(text,60),text,status:"running",origin:"nexo",steps:[],proposals:[],created:nowISO()};
+  const M={title:short(text,60),text,status:"running",origin:"nexo",steps:[],proposals:[],created:nowISO(),fuentes:{nexo:srcStat("nexo")}};
+  const cold=coldStart();
   const push=(who,kind,msg,extra)=>{M.steps.push(Object.assign({who,kind,text:msg,at:nowISO()},extra||{}));S.live=Object.assign({id:mid},M);selMission=mid;renderComms();renderRoster()};
   const persist=()=>save("missions/"+mid,JSON.parse(JSON.stringify(M)));
   let redirect=false,committed=false;const desp=[];
@@ -1000,9 +1001,12 @@ async function runMission(text,target,all,opts){
       if(!plan.length)plan=[{dept:dl[0].id,task:text}];
       if(opts.lead&&dl.some(d=>d.id===opts.lead)){plan=plan.filter(p=>p.dept!==opts.lead).sort((a,b)=>canonIdx(a.dept)-canonIdx(b.dept));plan.unshift({dept:opts.lead,task:"Evalúa esta decisión con números: costo, efecto en el colchón y en la meta, y alternativas."});plan=plan.slice(0,3)}
       else plan=plan.sort((a,b)=>canonIdx(a.dept)-canonIdx(b.dept)).slice(0,all?8:3);
-      if(r.title)M.title=short(r.title,60);push("nexo","plan",short(r.why||"Plan listo.",220),{plan});SC.think=0}
+      if(r.title)M.title=short(r.title,60);
+      if(cold&&(all||opts.why==="cold"))push("nexo","note","Arranque en frío: aún no hay despachos ni Tablero. Odín no responde «no hay datos»: lanza la ronda completa para construir el Tablero ahora.");
+      push("nexo","plan",short(r.why||"Plan listo.",220),{plan,convoked:plan.length,total:dl.length,why:opts.why||""});SC.think=0}
     persist();setParty(plan.map(p=>p.dept));
-    threadPush("nexo",{r:"u",k:"mision",t:text.slice(0,1500),m:mid});
+    {const nm=plan.map(p=>gn(dl.find(x=>x.id===p.dept))).join(" → ");bubble(NEXO_T,mm("Convoco a "+nm),4200)}
+    threadPush("nexo",{r:"u",k:"mision",t:text.slice(0,1500),m:mid},{r:"a",k:"convoca",t:"Convoco a "+plan.map(p=>gn(dl.find(x=>x.id===p.dept))).join(" → ")+" ("+plan.length+" de "+dl.length+"), y yo cierro. "+(M.steps.filter(s=>s.kind==="plan").map(s=>s.text)[0]||""),m:mid});
     await recall;
     for(let i=0;i<plan.length;i++){
       if(stopFlag)throw{code:"cancelled"};
@@ -1010,7 +1014,7 @@ async function runMission(text,target,all,opts){
       setPhase(gn(d)+" recibe la orden");
       if(a){if(!atHome(a))await go(a,a.home,84);await pulse(a,d.color);a.emote={k:"!",until:performance.now()+1300};bubble(a,(RECV[a.kind]||RECV.studio)+mm(short(p.task,70)),2600);a.state="working";a.dir=-1;renderRoster()}
       setPhase(gn(d)+" prepara su despacho");
-      const src=srcOf(d.id);
+      const src=srcOf(d.id);M.fuentes[d.id]=srcStat(d.id);
       const proposed=M.proposals.map(x=>x.type==="card"?"Tarjeta: "+x.front:x.type==="project"?"Proyecto: "+x.title:x.type==="skill"?"Habilidad: "+x.name:"Misión del día: "+x.text);
       const noap=noAplica(d.id);
       let r;try{r=await callJson(agentPrompt(d,p.task,text,desp.filter(o=>o.ok),src,proposed,cap,noap),"default")}finally{if(a){a.state="idle";a.dir=1}}
@@ -1070,7 +1074,7 @@ async function runMission(text,target,all,opts){
     M.status="done";push("nexo","summary",M.summary,{next:M.next});persist();
     if(opts.review){const wk=isoWeek(today());save("reviews/"+wk+"-"+Date.now().toString(36),{week:wk+" · "+today(),created:nowISO(),summary:M.summary,departments:desp.map(o=>({name:nameOf(o.agent),findings:[o.hallazgo,o.evidencia?"Evidencia: "+o.evidencia:"",o.recomendacion.accion?"Recomendación: "+o.recomendacion.accion:"",o.ok?"":"Descartado: "+o.motivo].filter(Boolean)})),actions:(M.actions||[]).map(a=>({text:(a.hora?a.hora+" · ":"")+a.accion})).concat(M.next&&!(M.actions||[]).length?[{text:M.next}]:[]),systemChanges:[]})}
     commit();
-    threadPush("nexo",{r:"a",k:"resumen",t:M.summary||"Misión cerrada.",acts:M.actions||[],conf:M.conflict||"",m:mid});
+    threadPush("nexo",{r:"a",k:"resumen",t:M.summary||"Misión cerrada.",acts:M.actions||[],conf:M.conflict||"",m:mid,ds:desp.map(o=>({a:o.agent,t:short(o.hallazgo,120),ok:!!o.ok,sd:!!o.sinDatos}))});
     (M.actions||[]).forEach((x,i)=>dossierAdd("nexo",{rec:{accion:(x.hora?x.hora+" · ":"")+x.accion,terminado:x.terminado,evidencia:"Basado en "+x.basado_en.map(nameOf).join(", "),mid,ai:i},from:"misión"}));
     bubble(NEXO_T,mm((M.verdict?M.verdict+". ":"")+short(M.summary,110)),6500);
     inv.forEach(a=>a.emote={k:"♥",until:performance.now()+2600});
@@ -1238,6 +1242,9 @@ function fmtDetail(s){const lines=String(s).split(/\n/).map(x=>x.trim()).filter(
   const bul=lines.filter(l=>/^[-•*]\s/.test(l)).length;
   if(bul>=lines.length*0.5)return `<ul>${lines.map(l=>`<li>${T(l.replace(/^[-•*]\s*/,""))}</li>`).join("")}</ul>`;
   return lines.map(l=>`<p>${T(l)}</p>`).join("")}
+/* qué recibió cada agente en la misión: rojo = llegó vacío */
+function recibioHTML(m,id){const f=m&&m.fuentes&&m.fuentes[id];if(!Array.isArray(f)||!f.length)return"";
+  return `<div class="recib"><span class="rl">Recibió:</span>${f.filter(s=>s.k.indexOf("perfil")<0).map(s=>`<span class="rc ${s.n?"":"z"}" title="${esc(s.n?"Llegaron "+s.n:"Llegó vacío"+(s.note?": "+s.note:""))}">${esc(s.k)} <b class="num">${s.n}</b>${s.n||!s.note?"":` <i>${esc(s.note)}</i>`}</span>`).join("")}</div>`}
 function renderLog(){
   const L=$("log");const m=curMission();
   if(!m){L.innerHTML=`<div class="empty">Aquí verás la conversación de cada misión: tu orden, el plan de Odín, el reporte de cada agente y lo que se pasan entre ellos. Prueba con "Planear mi día".</div>`;return}
@@ -1245,12 +1252,12 @@ function renderLog(){
   const atBottom=L.scrollHeight-L.scrollTop-L.clientHeight<30;
   L.innerHTML=(m.steps||[]).map(st=>{const w=whoInfo(st.who);const hh=hhmm(st.at);
     if(st.kind==="order")return `<div class="msg me"><div class="bub"><div class="mh"><strong style="color:${GOLD}">Tu orden</strong><span class="tm">${hh}</span></div><div class="lead">${T(st.text)}</div></div><img class="av" src="${portrait("cmd")}" alt=""></div>`;
-    if(st.kind==="plan")return `<div class="sys"><span class="sysl">Odín trazó el plan</span><div class="route">${(st.plan||[]).map((p,i)=>`<span class="rchip" style="--ac:${whoInfo(p.dept).color}" title="${esc(p.task)}">${i+1}. ${esc(whoInfo(p.dept).name)}</span>`).join('<span class="arr">→</span>')}<span class="arr">→</span><span class="rchip" style="--ac:${GOLD}">Odín</span></div>${st.text?`<div>${T(st.text)}</div>`:""}</div>`;
-    if(st.kind==="report"&&st.desp){const src=portrait(st.who),d=st.desp;return `<div class="msg${d.ok===false?" rej":""}" style="--ac:${w.color}">${src?`<img class="av" src="${src}" alt="">`:`<span class="av" style="background:${w.color}"></span>`}<div class="bub"><div class="mh"><strong style="color:${w.color}">${esc(w.name)}</strong><span class="dtag">Despacho</span><span class="tm">${hh}</span></div>${st.task?`<div class="task">Tarea: ${T(st.task)}</div>`:""}<div class="lead">${T(st.text)}</div>${d.ok===false?`<div class="rejtag">Descartado · ${T(d.motivo)}</div>`:""}${d.rev?`<div class="revtag" title="${esc(d.rev.issues.join(" · "))}">${d.rev.fixed?"Autorrevisión: corrigió "+d.rev.issues.length+" punto"+(d.rev.issues.length===1?"":"s"):"Autorrevisión: no logró corregir "+d.rev.issues.length+" punto"+(d.rev.issues.length===1?"":"s")}</div>`:""}<details><summary>Ver despacho completo</summary>${despBody(d)}${d.capacidad?`<p class="muted" style="font-size:.84rem;margin:6px 0 0">Capacidad de hoy: ${esc(d.capacidad.nivel)}${d.capacidad.minutos?" · "+d.capacidad.minutos+" min":""}</p>`:""}${d.detalle?fmtDetail(d.detalle):""}</details>${d.ok!==false&&d.recomendacion&&d.recomendacion.accion&&m.status!=="running"?rateHTML(st.who,m.id+"·"+st.who,d.recomendacion.accion):""}</div></div>`}
+    if(st.kind==="plan")return `<div class="sys"><span class="sysl">${st.convoked?"Odín convocó a "+st.convoked+" de "+(st.total||st.convoked)+" agente"+(st.total===1?"":"s"):"Odín trazó el plan"}</span><div class="route">${(st.plan||[]).map((p,i)=>`<span class="rchip" style="--ac:${whoInfo(p.dept).color}" title="${esc(p.task)}">${i+1}. ${esc(whoInfo(p.dept).name)}</span>`).join('<span class="arr">→</span>')}<span class="arr">→</span><span class="rchip" style="--ac:${GOLD}">Odín sintetiza</span></div>${st.text?`<div>${T(st.text)}</div>`:""}</div>`;
+    if(st.kind==="report"&&st.desp){const src=portrait(st.who),d=st.desp;return `<div class="msg${d.ok===false?" rej":""}" style="--ac:${w.color}">${src?`<img class="av" src="${src}" alt="">`:`<span class="av" style="background:${w.color}"></span>`}<div class="bub"><div class="mh"><strong style="color:${w.color}">${esc(w.name)}</strong><span class="dtag">Despacho</span><span class="tm">${hh}</span></div>${st.task?`<div class="task">Tarea: ${T(st.task)}</div>`:""}${recibioHTML(m,st.who)}${d.sinDatos?`<div class="sdtag">Sin datos en sus fuentes${(d.faltan||[]).length?" · le falta: "+T(d.faltan.join("; ")):""}</div>`:""}<div class="lead">${T(st.text)}</div>${d.ok===false?`<div class="rejtag">Descartado · ${T(d.motivo)}</div>`:""}${d.rev?`<div class="revtag" title="${esc(d.rev.issues.join(" · "))}">${d.rev.fixed?"Autorrevisión: corrigió "+d.rev.issues.length+" punto"+(d.rev.issues.length===1?"":"s"):"Autorrevisión: no logró corregir "+d.rev.issues.length+" punto"+(d.rev.issues.length===1?"":"s")}</div>`:""}<details><summary>Ver despacho completo</summary>${despBody(d)}${d.capacidad?`<p class="muted" style="font-size:.84rem;margin:6px 0 0">Capacidad de hoy: ${esc(d.capacidad.nivel)}${d.capacidad.minutos?" · "+d.capacidad.minutos+" min":""}</p>`:""}${d.detalle?fmtDetail(d.detalle):""}</details>${d.ok!==false&&d.recomendacion&&d.recomendacion.accion&&m.status!=="running"?rateHTML(st.who,m.id+"·"+st.who,d.recomendacion.accion):""}</div></div>`}
     if(st.kind==="reject")return `<div class="sys rej">${T(st.text)}</div>`;
     if(st.kind==="report"){const src=portrait(st.who);return `<div class="msg" style="--ac:${w.color}">${src?`<img class="av" src="${src}" alt="">`:`<span class="av" style="background:${w.color}"></span>`}<div class="bub"><div class="mh"><strong style="color:${w.color}">${esc(w.name)}</strong><span class="tm">${hh}</span></div>${st.task?`<div class="task">Tarea: ${T(st.task)}</div>`:""}<div class="lead">${T(st.text)}</div>${st.detail?`<details><summary>Ver informe completo</summary>${fmtDetail(st.detail)}</details>`:""}</div></div>`}
     if(st.kind==="handoff"){const to=whoInfo(st.to);return `<div class="hand"><span style="color:${w.color}">${esc(w.name)}</span> <span class="arr">lleva una nota a</span> <span style="color:${to.color}">${esc(to.name)}</span><span class="hq">“${T(st.text)}”</span></div>`}
-    if(st.kind==="summary")return `<div class="sys"><span class="sysl">Odín selló los despachos · resumen y Tablero arriba</span></div>`;
+    if(st.kind==="summary")return `<div class="sys"><span class="sysl">Síntesis de Odín</span><div>${T(st.text||"")}</div>${st.next?`<div class="muted" style="font-size:.84rem">Siguiente paso: ${T(st.next)}</div>`:""}<div class="muted" style="font-size:.8rem">Resumen completo y Tablero, arriba.</div></div>`;
     if(st.kind==="error")return `<div class="sys err">${T(st.text)}</div>`;
     return `<div class="sys">${T(st.text)}</div>`}).join("")||`<div class="empty">Misión sin registros.</div>`;
   if(running||atBottom)L.scrollTop=L.scrollHeight;
@@ -1313,7 +1320,7 @@ function renderNexo(){ensureLayout();renderHud();renderBoard();renderComms();ren
 /* Orden fijo de trabajo en las misiones; Odín siempre cierra. */
 const CANON=["habitos","finanzas","carrera","aprendizaje","sistema"];
 const canonIdx=id=>{const i=CANON.indexOf(id);return i<0?50:i};
-const SRCN={habitos:"hábitos y energía",finanzas:"finanzas",carrera:"proyectos y habilidades",aprendizaje:"Aprendí, Me trabé y Repaso",sistema:"uso del sistema",nexo:"despachos del escuadrón y Tablero de estado"};
+const SRCN={habitos:"hábitos, energía, lo que hiciste (Hice) y Entrenamiento",finanzas:"finanzas",carrera:"proyectos, habilidades y tu bitácora (Hice, Decidí, Siguiente)",aprendizaje:"Aprendí, Me trabé, Hice, Repaso y Bandeja",sistema:"uso del sistema",nexo:"despachos del escuadrón y Tablero de estado"};
 const nameOf=id=>{if(id==="nexo")return"Odín";const d=depts().find(x=>x.id===id);return d?gn(d):String(id||"")};
 function agentIdFrom(x){x=String(x||"").trim().toLowerCase();if(!x)return"";if(x==="nexo"||x==="odín"||x==="odin")return"nexo";
   const d=depts().find(d=>d.id===x||gn(d).toLowerCase()===x||d.name.toLowerCase()===x);return d?d.id:""}
@@ -1326,7 +1333,7 @@ function profileText(){const p=profOf(),o=[];const ln=(k,v)=>{v=String(v||"").re
   let dl="";if(p.goalDate){const n=Math.round((parse(p.goalDate)-parse(today()))/864e5);dl=" · fecha objetivo: "+p.goalDate+(n>=0?" (faltan "+n+" días)":" (ya pasó)")}
   if(p.goal||dl)o.push("- Meta principal: "+(p.goal||cfg().goal||"sin definir")+dl);
   const rs=[p.hours?"horas disponibles: "+p.hours:"",p.money?"dinero: "+p.money:"",p.commitments?"compromisos fijos: "+p.commitments:""].filter(Boolean).join("; ");
-  ln("Restricciones reales",rs);ln("Aprende mejor",p.learnBest);ln("No le funciona",p.learnBad);
+  ln("Restricciones reales",rs);ln("Aprende mejor",p.learnBest);ln("No le funciona",p.learnBad);ln("Usuario de GitHub",ghClean(p.github));
   if(p.patterns.length)o.push("- Patrones conocidos: "+p.patterns.join("; "));
   if(p.avoid.length)o.push("- NO quiere que le recomienden: "+p.avoid.join("; ")+". Si una idea cae aquí, descártala.");
   return "\n\nPERFIL DEL COMANDANTE (lo escribió él; respétalo en todo lo que digas):\n"+(o.length?o.join("\n"):"- Aún vacío.")}
@@ -1369,6 +1376,9 @@ function srcOf(id){
       return sc.pts+"/"+sc.min+" pts"+(sc.met?" cumplido":"")+", energía "+(d.energy||"-")+", estudio "+(d.studyMin||0)+" min"+(hb?", hábitos: "+hb:", sin hábitos")+(bn?", bonus: "+bn:"")});
     L.push("Últimos 14 días (los días sin registro no aparecen):\n"+(dl.join("\n")||"- sin registros"));
     c.habits.forEach(h=>{let n=0;for(let i=0;i<7;i++){const d=S.days[addDays(t,-i)];if(d&&d.habits&&d.habits[h.id])n++}L.push("Últimos 7 días · "+h.name+": "+n+"/7")});
+    const hl=dayLines(7,(s,d)=>{const x=logOf(d).hice.trim();return x?"hizo: "+short(x.replace(/\s+/g," "),150):""});
+    L.push("Lo que anotó en «Hice» (bitácora), últimos 7 días:\n"+(hl.join("\n")||"- sin entradas"));
+    L.push(enSignals());
   }else if(id==="finanzas"){
     L.push(finSummary()||"Aún no hay datos de finanzas.");
     if(S.fin&&S.fin.notes)L.push("Notas de finanzas: "+short(S.fin.notes,300));
@@ -1378,16 +1388,20 @@ function srcOf(id){
     L.push("Habilidades PROBADAS (con evidencia): "+(skillsLine("probada")||"ninguna registrada")+".");
     L.push("Habilidades EN PRÁCTICA: "+(skillsLine("practica")||"ninguna registrada")+".");
     L.push("SIN PROBAR (hipótesis, no son habilidades): "+(skillsLine("sinprobar")||"ninguna")+".");
-    L.push("Proyectos: "+(S.projects.length?S.projects.map(p=>p.title+" ["+areaOf(p)+", "+(COLN[p.status]||"Ideas")+(p.stack?", "+short(p.stack,60):"")+(p.next?", siguiente: "+short(p.next,80):"")+(p.repo?", repo: "+p.repo:"")+(p.updated?", actualizado "+String(p.updated).slice(0,10):"")+"]").join("; "):"ninguno aún")+".");
+    L.push("Proyectos: "+(S.projects.length?S.projects.map(p=>p.title+" ["+areaOf(p)+", "+(COLN[p.status]||"Ideas")+(p.goal?", de qué trata: "+short(p.goal,100):"")+(p.stack?", "+short(p.stack,60):"")+(p.next?", siguiente: "+short(p.next,80):"")+(p.learned?", aprendido: "+short(p.learned,90):"")+(p.repo?", repo: "+p.repo:"")+(p.updated?", actualizado "+String(p.updated).slice(0,10):"")+"]").join("; "):"ninguno aún")+".");
+    const cl=dayLines(14,(s,d)=>{const l=logOf(d),tg=f=>{const x=tagLabel(l.tags[f]);return x?" ["+x+"]":""};
+      return ["hice","decidi","siguiente"].map((f,i)=>l[f].trim()?["hizo","decidió","siguiente paso"][i]+tg(f)+": "+short(l[f].replace(/\s+/g," "),i===0?170:130):"").filter(Boolean).join(" | ")});
+    L.push("Bitácora (Hice / Decidí / Siguiente), últimos 14 días:\n"+(cl.join("\n")||"- sin entradas"));
   }else if(id==="aprendizaje"){
     const dl=dayLines(14,(s,d)=>{const l=logOf(d),tg=f=>{const x=tagLabel(l.tags[f]);return x?" ["+x+"]":""};const a=l.aprendi.trim(),b=l.trabe.trim();
-      return (a?"aprendió"+tg("aprendi")+": "+short(a,220):"")+(a&&b?" | ":"")+(b?"se trabó"+tg("trabe")+": "+short(b,200):"")});
-    L.push("Bitácora (Aprendí / Me trabé), últimos 14 días:\n"+(dl.join("\n")||"- sin entradas"));
+      const h=l.hice.trim();return [a?"aprendió"+tg("aprendi")+": "+short(a,220):"",b?"se trabó"+tg("trabe")+": "+short(b,200):"",h?"hizo"+tg("hice")+": "+short(h.replace(/\s+/g," "),140):""].filter(Boolean).join(" | ")});
+    L.push("Bitácora (Aprendí / Me trabé / Hice), últimos 14 días:\n"+(dl.join("\n")||"- sin entradas"));
     const due=S.cards.filter(x=>(x.due||t)<=t),tp={};S.cards.forEach(x=>{const k=x.topic||"Sin tema";tp[k]=(tp[k]||0)+1});
     L.push("Repaso: "+S.cards.length+" tarjetas, "+due.length+" pendientes hoy. Por tema: "+(Object.entries(tp).map(([k,n])=>k+" "+n).join(", ")||"—")+".");
     const hard=S.cards.filter(x=>(x.reviews||0)>0).sort((a,b)=>(a.ease||2.5)-(b.ease||2.5)).slice(0,5);
     if(hard.length)L.push("Tarjetas que más te cuestan (facilidad baja): "+hard.map(x=>short(x.front,70)+" (tema "+(x.topic||"—")+", "+(x.reviews||0)+" repasos, facilidad "+(+(x.ease||2.5)).toFixed(2)+")").join(" | "));
     L.push("Preguntas existentes: "+(S.cards.slice(0,25).map(x=>short(x.front,60)).join(" | ")||"ninguna"));
+    const bx=S.inbox.filter(n=>n.state==="open");L.push("Bandeja (notas rápidas sin clasificar): "+(bx.length?bx.length+" · "+bx.slice(0,8).map(n=>short(n.text||n.t||"",100)).filter(Boolean).join(" | "):"vacía")+".");
   }else if(id==="sistema"){
     let act=0,lg=0,cl=0;for(let i=0;i<14;i++){const d=S.days[addDays(t,-i)];if(!d)continue;if(hasAct(d))act++;if(hasLogText(d))lg++;if(logOf(d).closed)cl++}
     L.push("Últimos 14 días: "+act+" con Actividades guardadas, "+lg+" con Bitácora, "+cl+" cerrados.");
@@ -1411,9 +1425,47 @@ function boardText(){const b=S.board;if(!b)return "TABLERO DE ESTADO: aún vací
     "- Huecos: "+((b.gaps||[]).join("; ")||"—"),"- Misión del día: "+(b.quest||"—")];
   if((b.actions||[]).length)o.push("- Acciones vigentes: "+b.actions.map(a=>(a.hora?a.hora+" ":"")+a.accion).join(" | "));
   const last=b.last||{};const ks=Object.keys(last).sort((a,b)=>canonIdx(a)-canonIdx(b));
-  if(ks.length)o.push("Último despacho de cada agente:\n"+ks.map(k=>{const x=last[k];return "- ["+k+"] "+nameOf(k)+" ("+String(x.at||"").slice(0,10)+", confianza "+(x.confianza||"—")+"): "+x.hallazgo+" | evidencia: "+x.evidencia+" | recomendación: "+x.accion+(x.pregunta?" | pregunta: "+x.pregunta:"")}).join("\n"));
+  if(ks.length)o.push("Último despacho de cada agente:\n"+ks.map(k=>{const x=last[k];if(x.sd)return "- ["+k+"] "+nameOf(k)+" ("+String(x.at||"").slice(0,10)+") SIN DATOS en sus fuentes: "+x.hallazgo+(x.faltan&&x.faltan.length?" | le falta: "+x.faltan.join("; "):"")+(x.pregunta?" | pregunta: "+x.pregunta:"");return "- ["+k+"] "+nameOf(k)+" ("+String(x.at||"").slice(0,10)+", confianza "+(x.confianza||"—")+"): "+x.hallazgo+" | evidencia: "+x.evidencia+" | recomendación: "+x.accion+(x.pregunta?" | pregunta: "+x.pregunta:"")}).join("\n"));
   return o.join("\n")}
-function sourcesFor(id){return id==="nexo"?boardText():srcOf(id)}
+/* ---------- qué recibe cada agente: conteos por fuente (alimentan el Diagnóstico y la regla de «sin datos») ---------- */
+function srcStat(id){
+  const c=cfg(),t=today(),o=[],add=(k,n,core,note)=>o.push({k,n:Math.max(0,+n||0),core:!!core,note:note||""});
+  const d14=[];for(let i=0;i<14;i++){const d=S.days[addDays(t,-i)];if(d)d14.push(d)}
+  const withF=(fs)=>d14.filter(d=>{const l=logOf(d);return fs.some(f=>l[f].trim())}).length;
+  const f=S.fin||{},nAcc=(f.accounts||[]).length,nExp=(f.expenses||[]).length,nInc=(f.incomes||[]).length;
+  const gh=()=>{const s=ghSignals();if(s)add("commits de GitHub",s.commits.length,false,s.commits.length?"":"sin commits recientes");
+    else add("commits de GitHub",0,false,!ghUser()?"sin usuario conectado":GH.err?(GH_TITLE[GH.err.kind]||"error de consulta"):(ghMem().env?(GH_TITLE[ghMem().env.kind]||"bloqueado"):"aún sin consulta"))};
+  const tail=()=>{const p=profOf();add("perfil (campos llenos)",[p.goal||c.goal,p.hours,p.money,p.commitments,p.learnBest,p.learnBad,p.patterns.length,p.avoid.length].filter(Boolean).length,false);
+    const d=dossierOf(id);add("expediente (entradas)",d.knows.length+d.recs.length+d.works.length+d.fails.length,false)};
+  if(id==="habitos"){add("hábitos configurados",c.habits.length+c.bonus.length,true);add("días con hábitos o energía (14 d)",d14.filter(hasAct).length,true);add("bitácora · Hice (7 d)",dayLines(7,(s,d)=>logOf(d).hice.trim()?"x":"").length,false);add("sesiones de entrenamiento",enDone().length,false,enPlan()?"":"plan aún sin cargar");gh();tail()}
+  else if(id==="finanzas"){add("cuentas",nAcc,true);add("gastos",nExp,true);add("ingresos",nInc,true);add("decisiones de dinero",S.decisions.length,false);tail()}
+  else if(id==="carrera"){add("proyectos",S.projects.length,true);add("habilidades",S.skills.length,true);add("bitácora · Hice/Decidí/Siguiente (14 d)",withF(["hice","decidi","siguiente"]),false);gh();tail()}
+  else if(id==="aprendizaje"){add("bitácora · Aprendí/Me trabé/Hice (14 d)",withF(["aprendi","trabe","hice"]),true);add("tarjetas de repaso",S.cards.length,true);add("Bandeja (notas abiertas)",S.inbox.filter(n=>n.state==="open").length,false);gh();tail()}
+  else if(id==="sistema"){add("días con actividad (14 d)",d14.filter(hasAct).length,true);add("misiones (14 d)",S.missions.filter(m=>String(m.created||"")>=addDays(t,-14)).length,false);add("propuestas de agentes",S.missions.reduce((a,m)=>a+(m.proposals||[]).length,0),false);gh();tail()}
+  else if(id==="nexo"){const b=S.board;add("despachos en el Tablero",b?Object.keys(b.last||{}).length:0,true);add("Tablero de estado",b?1:0,true);
+    add("hábitos configurados (respaldo)",c.habits.length,false);add("proyectos en curso (respaldo)",S.projects.filter(p=>(p.status||"idea")==="doing").length,false);add("entradas de bitácora (respaldo)",d14.filter(hasLogText).length,false);add("cuentas (respaldo)",nAcc,false)}
+  else{tail()}
+  return o}
+const srcEmpty=id=>srcStat(id).filter(s=>s.n===0);
+const srcHeader=id=>"DATOS QUE RECIBISTE (conteos de esta consulta): "+srcStat(id).map(s=>s.k+" "+s.n+(s.n===0?" [VACÍO"+(s.note?": "+s.note:"")+"]":"")).join(" · ")+".";
+/* sin datos = todas las fuentes principales del agente llegaron vacías */
+function sinDatosDe(id){const core=srcStat(id).filter(s=>s.core);return core.length>0&&core.every(s=>s.n===0)}
+function emptyRule(id,chat){const e=srcEmpty(id).filter(s=>s.k.indexOf("(respaldo)")<0&&s.k.indexOf("perfil")<0&&s.k.indexOf("expediente")<0);if(!e.length)return"";const sd=sinDatosDe(id);
+  return "\n\nFUENTES VACÍAS: "+e.map(s=>s.k).join(", ")+". Si una fuente está vacía es porque "+WHO()+" aún no ha registrado nada, no porque algo esté mal. "+
+    (sd?"TODAS tus fuentes principales llegaron vacías: no des un consejo genérico ni inventes cifras. "+(chat?"Dilo con claridad y pídele UN solo dato, el más útil y fácil de responder":"En hallazgo di con claridad qué no tienes, en faltan lista (1 a 3) los datos concretos que necesitas y en pregunta pídele UNO solo, el más útil y fácil de responder")+" (ej. «¿Cuánto tienes ahorrado y cuánto gastas al mes?»). Registrar ese dato puede ser tu recomendación, con duración y criterio de terminado.":
+    "Para lo vacío no des consejo genérico: dilo en una línea y pídele "+(chat?"":"en pregunta ")+"el dato concreto que necesitas"+(chat?"":" (anótalo también en faltan)")+". Para lo demás, usa tus datos.")}
+function odinBackup(){const c=cfg(),t=today(),o=["RESUMEN MÍNIMO DE LOS DATOS DE "+WHO()+" (respaldo directo; si un despacho dice otra cosa, manda el despacho):"];
+  const d=S.days[t],sc=score(t),dn=c.habits.filter(h=>d&&d.habits&&d.habits[h.id]).map(h=>h.name);
+  o.push("- Hábitos de hoy ("+t+"): "+(c.habits.length?dn.length+" de "+c.habits.length+" hechos"+(dn.length?" ("+dn.join(", ")+")":"")+" · "+sc.pts+"/"+sc.min+" puntos · racha "+streak()+" días"+(d&&d.energy?" · energía "+d.energy:""):"sin hábitos configurados"));
+  const pr=S.projects.filter(p=>(p.status||"idea")==="doing");
+  o.push("- Proyectos en curso: "+(pr.length?pr.map(p=>p.title+(p.next?" (siguiente: "+short(p.next,70)+")":"")).join("; "):"ninguno"+(S.projects.length?" (hay "+S.projects.length+" en otros estados)":" (no hay proyectos registrados)")));
+  let ld="";for(let i=0;i<30&&!ld;i++){const s=addDays(t,-i),dd=S.days[s];if(dd&&hasLogText(dd))ld=s}
+  if(ld){const l=logOf(S.days[ld]);o.push("- Última bitácora ("+ld+"): "+LF.filter(([f])=>l[f].trim()).map(([f,n])=>n.toLowerCase()+": "+short(l[f].replace(/\s+/g," "),110)).join(" | "))}else o.push("- Última bitácora: ninguna en los últimos 30 días");
+  const fc=S.fin?finCalc(S.fin):null;
+  if(enPlan()){const st=enStreak(),nx=enNext();o.push("- Entrenamiento: racha "+st.cur+" días ("+EN_STN[st.state]+"), siguiente sesión "+(nx?nx.name:"—")+", "+enDone().length+" sesiones registradas")}
+  o.push("- Colchón: "+(fc&&(fc.total>0||fc.monthly>0)?(isFinite(fc.runway)?fc.runway.toFixed(1)+" meses":"sin gasto mensual que lo limite")+" (ahorro "+raw(fc.total)+", gasto fijo "+raw(fc.monthly)+"/mes)":"sin datos de finanzas"));
+  return o.join("\n")}
+function sourcesFor(id){return id==="nexo"?boardText()+"\n\n"+odinBackup():srcOf(id)}
 /* evidencia: un dato concreto que exista en las fuentes del agente (cifra que aparece tal cual o palabras que coinciden) */
 function hasEvidence(ev,src){ev=String(ev||"").trim();src=String(src||"");if(ev.length<12)return false;
   const nums=(ev.match(/\d[\d.,:\/-]*\d|\d/g)||[]).map(n=>n.replace(/[.,]$/,"")).filter(n=>n.length>=2);if(nums.some(n=>src.includes(n)))return true;
@@ -1498,6 +1550,7 @@ function tunePrompt(id,o){const d=depts().find(x=>x.id===id),hf=depts().find(x=>
 /* ---------- autorrevisión del despacho ---------- */
 function durMin(s){s=String(s||"").toLowerCase();let m=0,f=false;const h=s.match(/(\d+(?:[.,]\d+)?)\s*(?:h\b|hr|hora)/);if(h){m+=parseFloat(h[1].replace(",","."))*60;f=true}const mi=s.match(/(\d+)\s*(?:min|m\b)/);if(mi){m+=+mi[1];f=true}return f?Math.round(m):0}
 function reviewIssues(o,cap,noap,src){const is=[],a=o.recomendacion.accion;
+  if(o.sinDatos)return(o.pregunta||o.faltan.length)?[]:["no pide a "+WHO()+" el dato concreto que necesita"];
   if(!hasEvidence(o.evidencia,src))is.push("no cita un dato concreto de tus fuentes en evidencia");
   if(cap&&cap.min&&durMin(o.recomendacion.duracion)>cap.min)is.push("la duración ("+o.recomendacion.duracion+") no cabe en la capacidad de hoy que reportó "+(cap.from||"Heracles")+" ("+cap.min+" min)");
   if(a&&!o.recomendacion.terminado)is.push("no dice cómo sabrá "+WHO()+" que terminó (criterio de terminado)");
@@ -1527,9 +1580,9 @@ async function foldThread(id){if(FOLDING[id])return;const t0=threadOf(id);if(t0.
 function chatPrompt(id,t,text){
   const odin=id==="nexo",d=odin?null:depts().find(x=>x.id===id);
   return BASEP()+"\n\nCHAT PRIVADO. "+(odin?"Eres NEXO, encarnado en Odín. Tu carácter: "+TRAITS.nexo:"Eres el agente del departamento "+d.name+(gn(d)!==d.name?", encarnado en "+gn(d):"")+". Tu misión permanente: "+d.mission+(TRAITS[id]?"\nTu carácter: "+TRAITS[id]:""))+" Que se note un poco en el tono, sin perder claridad."+
-    (odin?"\nSolo ves los despachos del escuadrón y el Tablero de estado (abajo); no ves los datos crudos de "+WHO()+". Si te pide un dato concreto, responde con lo que dicen los despachos y di qué agente lo lleva; si hace falta trabajo del escuadrón, sugiere desplegar una misión (botón «Desplegar misión»).":
-      "\nTus FUENTES son solo las de abajo ("+SRCN[id]+"). Hablas de tu área; si te preguntan por otra, dilo en una línea y señala al agente que la lleva. Si algo no está en tus fuentes, no lo sabes: no lo inventes.")+
-    exText(id)+
+    (odin?"\nVes los despachos del escuadrón, el Tablero de estado y un RESUMEN MÍNIMO de los datos de "+WHO()+" como respaldo (abajo); no ves el detalle de cada área. NUNCA respondas «no hay datos» ni «no hay despachos»: si no hay despachos ni Tablero, responde con el RESUMEN MÍNIMO y di que para armar el Tablero hay que convocar al escuadrón (botón «Enviar y convocar»). Si te pide un dato concreto, responde con lo que dicen los despachos y di qué agente lo lleva. Esta es una respuesta rápida sin convocar al escuadrón.":
+      "\nTus FUENTES son solo las de abajo ("+SRCN[id]+"). Hablas de tu área; si te preguntan por otra, dilo en una línea y señala al agente que la lleva. Si algo no está en tus fuentes, no lo sabes: no lo inventes.\n"+srcHeader(id)+emptyRule(id,true))+
+    exText(id)+(id==="habitos"?EN_COACH:"")+
     "\n\n"+dossierText(id)+
     (t.summary?"\n\nRESUMEN DE LA CONVERSACIÓN ANTERIOR: "+t.summary:"")+
     (t.msgs.length?"\n\nÚLTIMOS MENSAJES:\n"+t.msgs.slice(-THR_MAX).map(m=>"- "+msgLine(id,m)).join("\n"):"")+
@@ -1549,7 +1602,7 @@ async function chatSend(id,text){
     const reply=short(r&&r.reply,1400)||"…";
     threadPush(id,{r:"u",k:"chat",t:text.slice(0,1500)},{r:"a",k:"chat",t:reply});
     dossierAdd(id,{facts:r&&r.sobre_ti,rec:id==="nexo"?null:r&&r.recomendacion,src,reqEv:true,from:"chat"});
-    if(id!=="nexo"&&r&&r.patron&&proposePattern(r.patron,id,src))toast(nameOf(id)+" propone un patrón para tu perfil (ficha del comandante)");
+    if(id!=="nexo"&&r&&r.patron&&proposePattern(r.patron,id,src))toast(nameOf(id)+" propone un patrón para tu perfil");
     if(a){bubble(a,mm(short(reply,90)),4200);a.emote={k:"♪",until:performance.now()+1500}}
     delete CHATPEND[id];return true}
   catch(e){if(e&&["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(e.code))sampleOff=true;
@@ -1559,6 +1612,14 @@ async function chatSend(id,text){
 /* ---------- consola emergente: chat + expediente ---------- */
 let CHATID="nexo",POPFROM=null;
 const STARTERS={nexo:["¿Cómo está mi tablero hoy?","¿Qué hago primero hoy?"],habitos:["¿Cómo voy con mis hábitos esta semana?","¿Qué hábito conviene ajustar?"],finanzas:["¿Cuántos meses de colchón tengo?","¿Conviene mover mis ahorros?"],carrera:["¿Qué camino tiene más evidencia hoy?","¿Qué experimento hago esta semana?"],aprendizaje:["¿En qué me trabé estos días?","¿Qué repaso hoy?"],sistema:["¿Qué fricción ves en el sistema?","¿Qué uso poco y conviene quitar?"]};
+/* hablarle a Odín = desplegar una misión (por defecto). Para «planear mi día», «reunión general» y la primera misión de cada día, convoca a TODOS. */
+const ALLRE=/(planea\w*|organiza\w*|arma\w*|define\w*)\s+(mi|el|este|nuestro)\s+dia|reunion\s+(general|de\s+escuadron)|junta\s+general|revision\s+general|convoca\w*\s+a\s+todos|plan\s+del\s+dia/;
+const flat=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+function firstToday(){const t=today();return !S.missions.some(m=>(m.origin||"nexo")==="nexo"&&m.status==="done"&&m.created&&ds(new Date(m.created))===t)}
+function coldStart(){const b=S.board;return !b||!Object.keys(b.last||{}).length}
+function convokeWhy(text){return coldStart()?"cold":ALLRE.test(flat(text))?"text":firstToday()?"first":""}
+const convokeAll=text=>!!convokeWhy(text);
+function odinSend(text){text=String(text||"").trim();if(!text)return;const why=convokeWhy(text);closeConsole();runMission(text,"",!!why,{why})}
 function openConsole(id){
   CHATID=id||"nexo";const back=$("console-back");$("c-target").value=id||"";
   let nm="Odín",sub="Coordina al escuadrón · ve despachos y Tablero";
@@ -1566,7 +1627,7 @@ function openConsole(id){
   $("pop-title").textContent=nm;$("pop-sub").textContent=sub;$("console-pop").dataset.who=id?"agent":"odin";
   const f=portrait(id?id:"nexo");if(f)$("pop-face").src=f;
   $("c-text").placeholder=id?"Escríbele a "+nm+"…":"Escríbele a Odín, o cuenta lo que hiciste…";
-  $("c-hint").textContent=id?"Chat privado con "+nm+". Solo ve sus fuentes ("+(SRCN[id]||"su área")+"), tu perfil y este hilo: un resumen más los últimos 10 mensajes.":"«Enviar» conversa con Odín (ve solo despachos y el Tablero). «Desplegar misión» pone a trabajar al escuadrón en orden fijo: Heracles → Moneta → Jano → Atenea → Hefesto, y Odín cierra. «Registrar avance» anota lo que ya hiciste.";
+  $("c-hint").textContent=id?"Chat privado con "+nm+". Solo ve sus fuentes ("+(SRCN[id]||"su área")+"), tu perfil y este hilo: un resumen más los últimos 10 mensajes.":"«Enviar y convocar» pone a trabajar al escuadrón: Odín planea, convoca a los agentes que hagan falta, cada uno entrega su despacho con SUS fuentes y Odín sintetiza. Para planear tu día, la reunión general, la primera misión del día o si el Tablero está vacío, convoca a TODOS (Heracles → Moneta → Jano → Atenea → Hefesto → Odín). «Solo preguntarle a Odín» responde rápido sin convocar. «Registrar avance» anota lo que ya hiciste.";
   if(back.hidden)POPFROM=document.activeElement;back.hidden=false;setCTab("chat");renderChat();renderExp();
   const th=threadOf(CHATID);if(th.unread){th.unread=0;putDoc("chats/"+CHATID,Object.assign(th,{updated:nowISO()}));renderRoster()}
   setTimeout(()=>{try{$("c-text").focus({preventScroll:true})}catch(e){}},30)}
@@ -1579,11 +1640,12 @@ $("console-back").addEventListener("mousedown",e=>{if(e.target===$("console-back
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeConsole()});
 const recLabel=k=>({pendiente:"Pendiente",hecha:"Hecha",ignorada:"Ignorada"})[k]||k;
 function despBody(d){if(!d)return"";const r=d.recomendacion||{};
-  return `<dl class="desp">${d.evidencia?`<dt>Evidencia</dt><dd>${T(d.evidencia)}</dd>`:""}${r.accion?`<dt>Recomendación</dt><dd>${T(r.accion)}${r.duracion?` <span class="dur">${T(r.duracion)}</span>`:""}${r.terminado?`<span class="done">Terminado cuando: ${T(r.terminado)}</span>`:""}</dd>`:""}${d.para&&(d.para.agente||d.para.porque)?`<dt>Para</dt><dd>${d.para.agente?`<strong>${esc(nameOf(d.para.agente))}</strong>`:""}${d.para.porque?(d.para.agente?" · ":"")+T(d.para.porque):""}</dd>`:""}${d.pregunta?`<dt>Pregunta</dt><dd>${T(d.pregunta)}</dd>`:""}</dl>${d.confianza?`<span class="conf c-${esc(d.confianza)}">Confianza ${esc(d.confianza)}</span>`:""}`}
+  return `<dl class="desp">${d.evidencia?`<dt>Evidencia</dt><dd>${T(d.evidencia)}</dd>`:""}${r.accion?`<dt>Recomendación</dt><dd>${T(r.accion)}${r.duracion?` <span class="dur">${T(r.duracion)}</span>`:""}${r.terminado?`<span class="done">Terminado cuando: ${T(r.terminado)}</span>`:""}</dd>`:""}${d.para&&(d.para.agente||d.para.porque)?`<dt>Para</dt><dd>${d.para.agente?`<strong>${esc(nameOf(d.para.agente))}</strong>`:""}${d.para.porque?(d.para.agente?" · ":"")+T(d.para.porque):""}</dd>`:""}${d.pregunta?`<dt>Pregunta</dt><dd>${T(d.pregunta)}</dd>`:""}${(d.faltan||[]).length?`<dt>Datos que faltan</dt><dd>${T(d.faltan.join("; "))}</dd>`:""}</dl>${d.confianza?`<span class="conf c-${esc(d.confianza)}">Confianza ${esc(d.confianza)}</span>`:""}`}
 function actsHTML(acts,mid){return `<ol class="acts">${acts.map((a,i)=>`<li><span class="hora">${esc(a.hora||"—")}</span><div><strong>${T(a.accion)}</strong>${a.terminado?`<span class="done">Terminado cuando: ${T(a.terminado)}</span>`:""}${(a.basado_en||[]).length?`<span class="by">Basado en: ${esc(a.basado_en.map(nameOf).join(", "))}</span>`:""}${mid?rateHTML("nexo",mid+"·nexo·"+i,a.accion):""}</div></li>`).join("")}</ol>`}
 function msgHTML(id,m){const me=m.r==="u",w=whoInfo(me?"cmd":id),src=me?"":portrait(id);let body;
   if(m.k==="despacho")body=`<div class="ctag">Despacho de misión${m.ord?" · "+T(short(m.ord,80)):""}</div><div class="ct"><strong>${T(m.t)}</strong></div>${despBody(m.d)}${m.m&&m.d&&m.d.recomendacion?rateHTML(id,m.m+"·"+id,m.d.recomendacion.accion||m.t):""}`;
-  else if(m.k==="resumen")body=`<div class="ctag">Cierre de misión</div><div class="ct">${T(m.t)}</div>${(m.acts||[]).length?actsHTML(m.acts,m.m):""}${m.conf?`<div class="ctag">Conflicto resuelto</div><div class="ct">${T(m.conf)}</div>`:""}`;
+  else if(m.k==="resumen")body=`<div class="ctag">Cierre de misión</div><div class="ct">${T(m.t)}</div>${(m.acts||[]).length?actsHTML(m.acts,m.m):""}${m.conf?`<div class="ctag">Conflicto resuelto</div><div class="ct">${T(m.conf)}</div>`:""}${(m.ds||[]).length?`<div class="ctag">Despachos recibidos</div><ul class="dsl">${m.ds.map(x=>`<li><strong style="color:${whoInfo(x.a).color}">${esc(nameOf(x.a))}</strong>${x.sd?` <span class="chip warn">Sin datos</span>`:""}${x.ok?"":` <span class="chip">Descartado</span>`}: ${T(x.t||"—")}</li>`).join("")}</ul>`:""}`;
+  else if(m.k==="convoca")body=`<div class="ctag">Convocatoria</div><div class="ct">${T(m.t)}</div>`;
   else if(m.k==="mision")body=`<div class="ctag">Misión desplegada</div><div class="ct">${T(m.t)}</div>`;
   else if(m.k==="pregunta")body=`<div class="ctag">Pregunta · señal de GitHub</div><div class="ct">${T(m.t)}</div>`;
   else if(m.k==="registro")body=`<div class="ctag">Registro de avance</div><div class="ct">${T(m.t)}</div>`;
@@ -1595,9 +1657,9 @@ function renderChat(){
   t.msgs.forEach(m=>{const dd=m.at?ds(new Date(m.at)):"";if(dd&&dd!==last){last=dd;h+=`<div class="cday"><span>${esc(dd===today()?"Hoy":pretty(dd))}</span></div>`}h+=msgHTML(id,m)});
   if(p)h+=msgHTML(id,{r:"u",t:p,at:nowISO()})+`<div class="cm ag"><span class="av"></span><div class="cb"><div class="thinking"><i></i><i></i><i></i><span>${esc(nameOf(id))} escribe…</span></div></div></div>`;
   if(CHATERR[id])h+=`<div class="sys err">${T(CHATERR[id])}</div>`;
-  if(!h){const d=dossierOf(id);h=`<div class="cintro"><p>${id==="nexo"?"Soy Odín. Veo lo que traen los despachos y el Tablero de estado. Pregúntame por el estado de hoy o despliega una misión.":"Soy "+esc(nameOf(id))+". Llevo "+esc(SRCN[id]||"mi área")+"; solo veo eso, tu perfil y este chat."}${d.knows.length?" Sé "+d.knows.length+" cosa"+(d.knows.length===1?"":"s")+" de ti (mira el Expediente).":""}</p><div class="starters">${(STARTERS[id]||[]).map(s=>`<button type="button" class="btn ghost" data-starter="${esc(s)}">${esc(s)}</button>`).join("")}</div></div>`}
+  if(!h){const d=dossierOf(id);h=`<div class="cintro"><p>${id==="nexo"?"Soy Odín. Lo que me digas lo convierto en una misión: convoco a los agentes que hagan falta, cada uno trabaja con sus fuentes y yo sintetizo. Si solo quieres una respuesta rápida, usa «Solo preguntarle a Odín».":"Soy "+esc(nameOf(id))+". Llevo "+esc(SRCN[id]||"mi área")+"; solo veo eso, tu perfil y este chat."}${d.knows.length?" Sé "+d.knows.length+" cosa"+(d.knows.length===1?"":"s")+" de ti (mira el Expediente).":""}</p><div class="starters">${(STARTERS[id]||[]).map(s=>`<button type="button" class="btn ghost" data-starter="${esc(s)}">${esc(s)}</button>`).join("")}</div></div>`}
   if(L.__h!==h&&!typingNote(L)){const stick=L.__id!==id||L.scrollHeight-L.scrollTop-L.clientHeight<60;L.innerHTML=h;L.__h=h;if(stick)L.scrollTop=L.scrollHeight}L.__id=id;
-  $("c-send").disabled=!!p||running;$("c-send").textContent=p?"Enviando…":"Enviar";
+  $("c-send").disabled=!!p||running;$("c-send").textContent=p?"Enviando…":id==="nexo"?"Enviar y convocar":"Enviar";$("c-ask").disabled=!!p||running||sampleOff;
   const n=dossierOf(id).recs.filter(r=>r.state==="pendiente").length,cn=$("ct-n");cn.hidden=!n;cn.textContent=n}
 $("chatlog").addEventListener("click",e=>{const b=e.target.closest("button[data-starter]");if(!b)return;$("c-text").value=b.dataset.starter;$("c-text").focus()});
 function renderExp(){
@@ -1616,9 +1678,12 @@ $("cv-exp").addEventListener("click",e=>{const id=CHATID;const kd=e.target.close
     r.state=st.dataset.st;r.upd=nowISO();putDossier(id,d);renderExp();renderChat();const nb=document.querySelector('#ex-recs .rec[data-id="'+r.id+'"] button[data-st="'+r.state+'"]');if(nb)nb.focus()}});
 $("ex-add").addEventListener("submit",e=>{e.preventDefault();const v=$("ex-fact").value.trim();if(!v)return;const d=dossierOf(CHATID);d.knows.push({id:"k"+Date.now().toString(36),t:short(v,160),at:nowISO(),by:"tú"});putDossier(CHATID,d);$("ex-fact").value="";renderExp()});
 $("c-text").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();$("cf").requestSubmit()}});
-$("cf").addEventListener("submit",async e=>{e.preventDefault();const id=CHATID,el=$("c-text"),t=el.value.trim();if(!t)return;el.value="";const ok=await chatSend(id,t);if(id===CHATID&&!$("console-back").hidden)try{el.focus({preventScroll:true})}catch(_){}if(!ok&&!el.value)el.value=t});
-$("c-run").onclick=()=>{const t=$("c-text").value.trim();if(!t){toast("Escribe primero la orden y luego pulsa Desplegar misión.");$("c-text").focus();return}$("c-text").value="";closeConsole();runMission(t,"")};
-$("quick").addEventListener("click",e=>{const b=e.target.closest("button[data-q]");if(!b)return;closeConsole();runMission(b.dataset.q,"",!!b.dataset.all)});
+$("cf").addEventListener("submit",async e=>{e.preventDefault();const id=CHATID,el=$("c-text"),t=el.value.trim();if(!t)return;
+  if(id==="nexo"){if(running){toast("Hay una misión en curso. Espera a que termine.");return}if(!sample||sampleOff){toast("La orquestación en vivo no está disponible en esta vista.");return}el.value="";odinSend(t);return}
+  el.value="";const ok=await chatSend(id,t);if(id===CHATID&&!$("console-back").hidden)try{el.focus({preventScroll:true})}catch(_){}if(!ok&&!el.value)el.value=t});
+$("c-ask").onclick=async()=>{const el=$("c-text"),t=el.value.trim();if(!t){toast("Escribe primero tu pregunta y luego pulsa Solo preguntarle a Odín.");el.focus();return}
+  if(CHATID!=="nexo")return;el.value="";const ok=await chatSend("nexo",t);if(!ok&&!el.value)el.value=t};
+$("quick").addEventListener("click",e=>{const b=e.target.closest("button[data-q]");if(!b)return;closeConsole();{const why=convokeWhy(b.dataset.q)||(b.dataset.all?"text":"");runMission(b.dataset.q,"",!!why,{why})}});
 $("c-stop").onclick=$("mbar-stop").onclick=()=>{stopFlag=true;if(ctl)ctl.abort()};
 
 /* ---------- despachos ---------- */
@@ -1629,14 +1694,17 @@ function normDesp(r,d,src){r=r||{};const rc=r.recomendacion&&typeof r.recomendac
     confianza:["alta","media","baja"].includes(cf)?cf:"baja",para:{agente:agentIdFrom(pa.agente),porque:short(pa.porque,140)},
     pregunta:short(r.pregunta,200),sobre_ti:(Array.isArray(r.sobre_ti)?r.sobre_ti:[]).map(x=>short(x,160)).filter(Boolean).slice(0,2),detalle:String(r.detalle||r.detail||"").slice(0,800)};
   if(d.id==="habitos"&&r.capacidad&&typeof r.capacidad==="object"){const lv=String(r.capacidad.nivel||"").toLowerCase(),mn=parseInt(r.capacidad.minutos,10);o.capacidad={nivel:["alta","media","baja"].includes(lv)?lv:"media",minutos:mn>0&&mn<1000?mn:0}}
-  o.ok=!!(o.hallazgo&&o.recomendacion.accion&&hasEvidence(o.evidencia,src));
-  o.motivo=o.ok?"":!o.hallazgo?"no entregó hallazgo":!o.recomendacion.accion?"no entregó recomendación":"no citó un dato concreto de sus fuentes";
+  o.faltan=(Array.isArray(r.faltan)?r.faltan:r.faltan?[r.faltan]:[]).map(x=>short(x,120)).filter(Boolean).slice(0,3);
+  o.sinDatos=sinDatosDe(d.id);
+  if(o.sinDatos&&!o.pregunta&&o.faltan.length)o.pregunta=short("¿Puedes registrar esto? "+o.faltan[0],200);
+  o.ok=o.sinDatos?!!(o.hallazgo&&(o.pregunta||o.faltan.length)):!!(o.hallazgo&&o.recomendacion.accion&&hasEvidence(o.evidencia,src));
+  o.motivo=o.ok?"":o.sinDatos?(!o.hallazgo?"no entregó hallazgo":"sin datos en sus fuentes y no pidió el dato concreto que necesita"):!o.hallazgo?"no entregó hallazgo":!o.recomendacion.accion?"no entregó recomendación":"no citó un dato concreto de sus fuentes";
   return o}
-const despLine=o=>"- ["+o.agent+"] "+nameOf(o.agent)+" · confianza "+o.confianza+" | hallazgo: "+o.hallazgo+" | evidencia: "+o.evidencia+" | recomendación: "+o.recomendacion.accion+(o.recomendacion.duracion?" ("+o.recomendacion.duracion+")":"")+(o.recomendacion.terminado?" · terminado cuando: "+o.recomendacion.terminado:"")+(o.para.agente?" | para "+nameOf(o.para.agente)+": "+o.para.porque:"")+(o.pregunta?" | pregunta: "+o.pregunta:"");
-const despCompact=o=>({evidencia:o.evidencia,recomendacion:o.recomendacion,confianza:o.confianza,para:o.para,pregunta:o.pregunta});
+const despLine=o=>o.sinDatos?"- ["+o.agent+"] "+nameOf(o.agent)+" · SIN DATOS en sus fuentes ("+WHO()+" aún no registró nada ahí) | hallazgo: "+o.hallazgo+(o.faltan&&o.faltan.length?" | datos que le faltan: "+o.faltan.join("; "):"")+(o.pregunta?" | pregunta a "+WHO()+": "+o.pregunta:"")+(o.recomendacion.accion?" | recomendación: "+o.recomendacion.accion:""):"- ["+o.agent+"] "+nameOf(o.agent)+" · confianza "+o.confianza+" | hallazgo: "+o.hallazgo+" | evidencia: "+o.evidencia+" | recomendación: "+o.recomendacion.accion+(o.recomendacion.duracion?" ("+o.recomendacion.duracion+")":"")+(o.recomendacion.terminado?" · terminado cuando: "+o.recomendacion.terminado:"")+(o.para.agente?" | para "+nameOf(o.para.agente)+": "+o.para.porque:"")+(o.pregunta?" | pregunta: "+o.pregunta:"");
+const despCompact=o=>({evidencia:o.evidencia,recomendacion:o.recomendacion,confianza:o.confianza,para:o.para,pregunta:o.pregunta,faltan:o.faltan||[],sinDatos:!!o.sinDatos});
 const normHora=h=>{h=String(h||"").trim();const m=h.match(/(\d{1,2}):(\d{2})/);return m?(h.toLowerCase().includes("mañana")?"mañana ":"")+pad(+m[1])+":"+m[2]:short(h,16)};
 function normBoard(syn,acc,mid){const prev=S.board||{},tb=syn.tablero||{},cap=tb.capacidad||{},ids=acc.map(o=>o.agent),last=Object.assign({},prev.last||{});
-  acc.forEach(o=>{last[o.agent]={at:o.at,hallazgo:o.hallazgo,evidencia:o.evidencia,accion:o.recomendacion.accion,duracion:o.recomendacion.duracion,terminado:o.recomendacion.terminado,confianza:o.confianza,para:o.para.agente,pregunta:o.pregunta}});
+  acc.forEach(o=>{last[o.agent]={at:o.at,hallazgo:o.hallazgo,evidencia:o.evidencia,accion:o.recomendacion.accion,duracion:o.recomendacion.duracion,terminado:o.recomendacion.terminado,confianza:o.confianza,para:o.para.agente,pregunta:o.pregunta,sd:o.sinDatos?1:0,faltan:o.faltan||[]}});
   const actions=(Array.isArray(syn.acciones)?syn.acciones:[]).map(a=>({accion:short(a&&a.accion,170),hora:normHora(a&&a.hora),terminado:short(a&&a.terminado,130),
     basado_en:[...new Set((Array.isArray(a&&a.basado_en)?a.basado_en:[a&&a.basado_en]).map(agentIdFrom))].filter(x=>ids.includes(x))})).filter(a=>a.accion&&a.basado_en.length).slice(0,3);
   const lv=String(cap.nivel||"").toLowerCase();
@@ -1657,7 +1725,7 @@ function renderBoard(){const b=S.board,el=$("b-body"),wh=$("b-when");let h;
       ${(b.actions||[]).length?`<div class="stack" style="gap:6px"><span class="eyebrow">Acciones de Odín</span>${actsHTML(b.actions,b.mission)}</div>`:""}
       ${b.conflict?`<div class="nextbox cond"><span>Cómo resolvió el conflicto</span><strong>${T(b.conflict)}</strong></div>`:""}${old?`<p class="hint">Es del ${esc(pretty(b.date))}: despliega una misión para actualizarlo.</p>`:""}`}
   if(el.__h!==h&&!typingNote(el)){el.innerHTML=h;el.__h=h}}
-$("b-body").addEventListener("click",e=>{if(!e.target.closest("button[data-bq]"))return;const b=document.querySelector("#quick button[data-q]");if(b)runMission(b.dataset.q,"",false)});
+$("b-body").addEventListener("click",e=>{if(!e.target.closest("button[data-bq]"))return;const b=document.querySelector("#quick button[data-q]");if(b)runMission(b.dataset.q,"",true,{why:coldStart()?"cold":"text"})});
 
 
 /* ---------- SEÑALES: actividad pública de GitHub (sin token; como máximo una consulta por hora; si falla, te dice exactamente por qué y todo sigue igual) ---------- */
@@ -1798,7 +1866,7 @@ $("gh-refresh").onclick=()=>ghFetch(true);
 $("gh-test").onclick=ghTest;
 function ghBoot(){if(GH_AUTO||!S.profile)return;GH_AUTO=true;renderGh();if(ghUser())setTimeout(()=>ghFetch(false),1500)}
 
-/* ---------- ficha del comandante: perfil (meta, contexto, restricciones, patrones) ---------- */
+/* ---------- perfil: perfil (meta, contexto, restricciones, patrones) ---------- */
 const PFF=[["pf-goal","goal"],["pf-date","goalDate"],["pf-hours","hours"],["pf-money","money"],["pf-commit","commitments"],["pf-learn","learnBest"],["pf-nolearn","learnBad"],["pf-patterns","patterns"],["pf-avoid","avoid"]];
 function renderPerfil(){const p=profOf(),c=cfg();
   PFF.forEach(([el,k])=>{const x=$(el);if(document.activeElement===x||x.dataset.dirty)return;let v=Array.isArray(p[k])?p[k].join("\n"):p[k];if(k==="goal"&&!v)v=c.goal||"";if(x.value!==v)x.value=v});
@@ -2054,7 +2122,7 @@ function paintAvatars(){
   const gal=$("av-gal");if(gal)gal.querySelectorAll(".avopt").forEach(x=>x.setAttribute("aria-checked",String(AV.chosen&&x.dataset.av===AV.id)));
   const cl=$("av-clear");if(cl)cl.hidden=AV.id!=="foto";
   const up=$("av-up");if(up)up.setAttribute("aria-pressed",String(AV.id==="foto"));
-  const pb=$("prof-btn");if(pb)pb.title="Ficha del comandante · avatar: "+AV.name}
+  const pb=$("prof-btn");if(pb)pb.title="Perfil · avatar: "+AV.name}
 function avApply(){AVCMD=AV.chosen?{acc:AV.acc,emb:AV.emb}:null;delete PORT.cmd;paintAvatars();try{renderChat();renderExp()}catch(e){}}
 function avPick(id){const b=avBuilt(id);AV={id,chosen:true,url:b.url,acc:b.acc,emb:b.emb,name:b.name};const ok=avPersist();avApply();return ok}
 function avReset(){AV.chosen=false;const b=avBuilt("buho");AV={id:"buho",chosen:false,url:b.url,acc:b.acc,emb:b.emb,name:b.name};avPersist();avApply()}
@@ -2139,7 +2207,7 @@ $("pr-save").onclick=()=>{
 /* ---------- apertura, cierre y secciones desplegables ---------- */
 let FIFROM=null;const FI_OPEN={perfil:false,prefs:false,habitos:false,gh:false};
 function renderFichaFolds(){Object.keys(FI_OPEN).forEach(k=>{const o=FI_OPEN[k];$("fi-h-"+k).setAttribute("aria-expanded",String(o));$("fi-b-"+k).hidden=!o})}
-function renderProfBtn(){const n=profOf().pending.length,b=$("prof-n");b.hidden=!n;b.textContent=n;$("prof-btn").setAttribute("aria-label","Ficha del comandante"+(n?" · "+n+" patrón"+(n===1?"":"es")+" por revisar":""))}
+function renderProfBtn(){const n=profOf().pending.length,b=$("prof-n");b.hidden=!n;b.textContent=n;$("prof-btn").setAttribute("aria-label","Perfil"+(n?" · "+n+" patrón"+(n===1?"":"es")+" por revisar":""))}
 function renderFicha(){
   const xp=xpTotal(),lv=lvlOf(xp),lo=25*(lv-1)**2,hi=25*lv**2;
   $("fi-name").textContent=cmdName();$("fi-rank").textContent=rankOf(lv);$("fi-lv").textContent="Nv "+lv;
@@ -2181,6 +2249,389 @@ const avp=$("fi-avpick");["dragenter","dragover"].forEach(t=>avp.addEventListene
 avp.addEventListener("drop",e=>{const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];avFile(f)});
 
 prefsLoad();avLoad();avApply();
+
+/* =================== DIAGNÓSTICO DE AGENTES: qué recibió cada uno en la última misión =================== */
+function diagMission(){return missionsAll().find(m=>m.origin!=="registro"&&m.fuentes&&Object.keys(m.fuentes).length>1)||null}
+function renderDiag(){const el=$("dg-body");if(!el)return;
+  const m=diagMission(),order=depts().slice().sort((a,b)=>canonIdx(a.id)-canonIdx(b.id)).map(d=>d.id).concat(["nexo"]);
+  const rep={};if(m)(m.steps||[]).forEach(s=>{if(s.kind==="report"&&s.desp)rep[s.who]=s.desp});
+  const head=m?`<p class="hint">Última misión con registro de fuentes: <strong>${T(m.title||"Misión")}</strong> · ${esc(pretty(ds(new Date(m.created||Date.now()))))} ${esc(hhmm(m.created))}. Lo que ves es lo que llegó a cada agente en esa misión; si algo está en rojo, esa fuente llegó vacía. «Ahora» es lo que hay guardado en este momento.</p>`
+    :`<p class="hint">Aún no hay una misión con registro de fuentes. Abajo ves lo que recibiría cada agente <strong>ahora</strong> con tus datos; despliega una ronda completa para registrar lo que recibe de verdad.</p>`;
+  const cards=order.map(id=>{const w=whoInfo(id),live=srcStat(id),got=m&&m.fuentes[id],src=portrait(id);
+    const rows=(got||live).filter(s=>s.k.indexOf("(respaldo)")<0||id==="nexo");
+    const chips=rows.map(s=>{const lv=live.find(x=>x.k===s.k),diff=got&&lv&&lv.n!==s.n;
+      return `<li class="${s.n?"ok":"z"}"><span class="k">${esc(s.k)}</span><b class="num">${s.n}</b>${s.n===0?`<span class="dst">vacío${s.note?" · "+esc(s.note):""}</span>`:""}${diff?`<span class="dnow">ahora ${lv.n}</span>`:""}</li>`}).join("");
+    const d=rep[id];let st;
+    if(!m)st=`<span class="chip">Vista previa</span>`;else if(id==="nexo")st=m.summary?`<span class="chip ok">Sintetizó</span>`:`<span class="chip">Sin síntesis</span>`;
+    else if(!got)st=`<span class="chip">No convocado en esa misión</span>`;
+    else if(!d)st=`<span class="chip">Sin despacho</span>`;else if(d.sinDatos)st=`<span class="chip warn">Sin datos · pidió el dato</span>`;else if(d.ok===false)st=`<span class="chip bad">Descartado</span>`;else st=`<span class="chip ok">Despacho entregado</span>`;
+    const empt=rows.filter(s=>s.n===0&&s.k.indexOf("(respaldo)")<0&&s.k.indexOf("perfil")<0&&s.k.indexOf("expediente")<0).length;
+    return `<article class="dgc${empt?" hasz":""}" style="--ac:${w.color}"><header>${src?`<img src="${src}" alt="">`:`<span class="dot" style="background:${w.color}"></span>`}<strong style="color:${w.color}">${esc(w.name)}</strong>${st}</header>
+      <ul class="dgl" aria-label="Fuentes de ${esc(w.name)}">${chips||`<li class="z">Sin fuentes</li>`}</ul>
+      ${d&&d.sinDatos&&((d.faltan||[]).length||d.pregunta)?`<p class="dgq"><strong>Pidió:</strong> ${T((d.faltan||[]).join("; ")||d.pregunta)}</p>`:""}</article>`}).join("");
+  const h=head+`<div class="dgrid">${cards}</div><p class="hint">Cada agente recibe también tu perfil y su expediente. Si «commits de GitHub» sale vacío, revisa la conexión en tu Perfil (en claude.ai puede estar bloqueado).</p>`;
+  if(el.__h!==h){el.innerHTML=h;el.__h=h}
+  const go=$("dg-run");if(go)go.disabled=running||sampleOff}
+$("dg-run").onclick=()=>{if(running)return;closeConsole();runMission("Planear mi día: ronda completa para revisar el estado de todas mis áreas.","",true,{why:coldStart()?"cold":"text"});show("nexo")};
+
+/* =================== ENTRENAMIENTO (a cargo de Heracles) · colección propia «entreno» =================== */
+/* Documentos: entreno/plan (programa y ejercicios), entreno/body (métricas), entreno/supl (creatina, agua, proteína) y entreno/w-* (una sesión cada uno).
+   Nada de esto toca days, config ni ninguna otra colección; lo único que escribe afuera es marcar el hábito «Ejercicio» del día al cerrar una sesión. */
+const EN={docs:{},loaded:false,seeded:false};
+const EN_DOW=["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+const dDiff=(a,b)=>Math.round((parse(a)-parse(b))/864e5);
+const r05=x=>Math.round(x*2)/2;
+const enId=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const EN_PERSONAL={program:"Upper/Lower 4 días (ejemplo editable)",startLabel:"",level:"",shoulder:"Sin molestias registradas",priorities:[],
+  refs:{},body:{weight:"",height:"",age:"",sex:"hombre",waist:"",fat:"",w:[]},creStart:"",creSeed:[],water:2000};
+const EN_PLAN_TXT=`UPPER A – Fuerza
+- Press inclinado con mancuernas, banco 30-45° [P] 3×6-8 — escápulas atrás y abajo pegadas al banco; codos a 30-45° del torso; bajar en 2 s a la parte alta del pecho
+- Jalón al pecho agarre ancho [P] 3×8-10 (Dominadas) — pecho arriba con ligera inclinación atrás; codos a las costillas, no jalar con las manos; barra a la clavícula sin balanceo. Cambia a dominadas si haces 8 limpias
+- Remo con mancuerna a una mano apoyado en banco [P] 3×6-8 — espalda plana paralela al piso; jalar hacia la cadera; pausa 1 s arriba
+- Elevación lateral con mancuernas de pie [A] 3×10-12 — torso ligeramente al frente; los codos guían hasta la altura del hombro; sin impulso, bajar en 2 s
+- Extensión de tríceps sobre la cabeza con cuerda [A] 2×8-10 (Mancuerna a dos manos) — codos fijos al frente; estirar completo atrás
+- Curl inclinado con mancuernas, banco 45-60° [A] 2×8-10 — brazos colgando detrás del torso; hombros quietos; bajar en 2-3 s
+LOWER A – Fuerza
+- Curl femoral acostado [A] 2×8-10 — cadera pegada al banco; recorrido completo; bajar en 2 s
+- Sentadilla en Smith [P] 3×6-8 (Sentadilla goblet) — pies ligeramente adelante de la barra al ancho de hombros; muslos paralelos o un poco más; rodillas hacia las puntas
+- Peso muerto rumano con mancuernas o barra [P] 3×6-8 — cadera atrás, rodillas apenas flexionadas; peso pegado a los muslos; bajar hasta sentir el femoral (media espinilla) con espalda neutra
+- Extensión de cuádriceps [A] 2×8-10 — pausa 1 s arriba; bajar controlado
+- Elevación de talones de pie [A] 3×8-10 (Escalón con mancuerna) — pausa 1-2 s abajo en el estiramiento; subir a la punta completa
+- Crunch en polea alta de rodillas [A] 2×10-12 (Crunch en banco declinado) — redondear la columna; exhalar al bajar; no jalar con los brazos
+UPPER B – Hipertrofia
+- Press de banca con barra [P] 3×8-10 (Máquina de pecho) — escápulas retraídas, pies firmes; barra a la línea de los pezones, codos a ~45°
+- Jalón agarre neutro [P] 3×10-12 — pecho arriba, codos hacia abajo; estirar completo arriba sin perder la postura
+- Remo sentado en polea agarre neutro [P] 3×10-12 (Máquina de remo con apoyo de pecho) — torso fijo sin mecerse; juntar escápulas al final
+- Press de hombro sentado [P] 2×8-10 (Mancuernas con banco a 80-90°) — codos ligeramente al frente del torso; bajar a la altura de las orejas
+- Face pull con cuerda [A] 2×12-15 — jalar hacia la frente separando la cuerda; terminar con codos altos y manos a los lados de la cabeza. No saltar: cuida el hombro
+- Curl con barra EZ [A] 2×10-12 — codos pegados a los costados; sin balanceo; bajar en 2 s
+LOWER B – Hipertrofia
+- Prensa de piernas [P] 3×8-10 — pies al ancho de hombros a media plataforma; bajar a ~90° de rodilla sin despegar el glúteo; no bloquear arriba
+- Curl femoral sentado [A] 2×10-12 (Curl femoral acostado) — rodilla alineada con el eje de la máquina; pausa 1 s al flexionar
+- Sentadilla búlgara con mancuernas [P] 2×8-10 por pierna — torso ligeramente al frente; muslo de adelante paralelo; empujar con el talón de adelante
+- Extensión de cuádriceps [A] 2×10-12 — pausa 1 s arriba
+- Aductor en máquina [A] 2×10-12 — abrir hasta sentir estiramiento, sin rebote
+- Elevación de talones sentado [A] 3×10-12 (Mancuerna sobre las rodillas) — pausa abajo, recorrido completo`;
+const SHRE=/press|lateral|face pull|jal[oó]n|dominada|fondos|remo/i;
+/* «Pegar lista»: encabezado de sesión y líneas «- Ejercicio [P|A] 3×6-8 (alternativa) — técnica» */
+function enParse(txt,prev){const out=[];let cur=null;const norm=s=>flat(s).replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+  const old={};(prev||[]).forEach(s=>(s.ex||[]).forEach(e=>{old[norm(e.n)]=e.id}));
+  String(txt||"").split(/\r?\n/).forEach(raw=>{const l=raw.trim();if(!l)return;
+    const m=l.match(/^[-•*]\s*(.+?)\s*\[\s*([PpAa])\s*\]\s*(\d+)\s*[×xX*]\s*(\d+)(?:\s*[-–a]\s*(\d+))?\s*(por\s+pierna|por\s+lado)?\s*(?:\(([^)]*)\))?\s*(?:[—–]|--|-)?\s*(.*)$/);
+    if(m){if(!cur){cur={id:"s1",name:"Sesión 1",ex:[]};out.push(cur)}
+      let tec=m[8]||"";const ns=/no\s+saltar/i.test(tec);tec=tec.replace(/\.?\s*no\s+saltar[^.;]*/i,"").replace(/marcado como\s*["“«]?\s*$/i,"").trim().replace(/[;,]\s*$/,"");
+      tec=tec.charAt(0).toUpperCase()+tec.slice(1);const n=m[1].trim(),lo=+m[4],hi=+(m[5]||m[4]),id=old[norm(n)]||enId("e");
+      cur.ex.push({id,n,t:m[2].toUpperCase(),s:Math.max(1,Math.min(8,+m[3])),lo:Math.min(lo,hi),hi:Math.max(lo,hi),pl:!!m[6],alt:(m[7]||"").trim(),tec,ns,sh:SHRE.test(n)&&!/femoral|cu[aá]driceps|prensa|talones/i.test(n)});return}
+    if(/^[-•*]/.test(l))return;
+    const parts=l.replace(/\s+/g," ").split(/\s+[–—-]\s+/),left=parts[0]===parts[0].toUpperCase()?parts[0].split(" ").map(w=>w.length===1?w.toUpperCase():w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(" "):parts[0];
+    cur={id:"",name:left+(parts.length>1?" – "+parts.slice(1).join(" – "):""),ex:[]};out.push(cur)});
+  const ids=["ua","la","ub","lb"];return out.filter(s=>s.ex.length).map((s,i)=>Object.assign(s,{id:(prev&&prev[i]&&prev[i].id)||ids[i]||("s"+(i+1))}))}
+function enDefaultPlan(){const P=EN_PERSONAL,ss=enParse(EN_PLAN_TXT);
+  ss.forEach(s=>s.ex.forEach((e,i)=>{e.id=s.id+"-"+(i+1)}));
+  return{v:1,program:P.program,startLabel:P.startLabel,block:"A",base:0,blockWeeks:8,readapt:2,level:P.level,shoulder:P.shoulder,priorities:P.priorities.slice(),
+    cal:{ua:0,la:1,ub:3,lb:5},warmup:"5 min de cardio + movilidad + 1-2 series de aproximación en el primer ejercicio.",
+    rules:{readapt:"2 series por ejercicio a RPE 6-7 (3-4 repeticiones en reserva), cargas por sensación.",normal:"Series completas del plan a RPE 7-8; la última serie a RPE 8.",prog:"Progresión doble: si llegas al tope del rango en todas las series con buena técnica, sube 2.5-5% la siguiente sesión; si no, mantén."},
+    rest:{P:[120,180],A:[60,120]},refs:Object.assign({},P.refs),sessions:ss,deload:null,updated:nowISO()}}
+function enSeed(){if(EN.docs.plan)return;const P=EN_PERSONAL;enPut("plan",enDefaultPlan());
+  if(!EN.docs.body)enPut("body",JSON.parse(JSON.stringify(P.body)));
+  if(!EN.docs.supl){const cre={};(P.creSeed||[]).forEach(d=>cre[d]=true);enPut("supl",{creStart:P.creStart||"",cre,water:{goal:P.water||0,days:{}},prot:{on:false,goal:0,days:{}}})}}
+function enLoad(s){const o={};s.docs.forEach(d=>{o[d.id]=d.data()});for(const id in EN.docs)if(PEND["entreno/"+id]>0)o[id]=EN.docs[id];EN.docs=o;EN.loaded=true;
+  if(!o.plan&&!EN.seeded){EN.seeded=true;enSeed()}}
+function enPut(id,data){data.updated=nowISO();EN.docs[id]=JSON.parse(JSON.stringify(data));PEND["entreno/"+id]=(PEND["entreno/"+id]||0)+1;
+  return save("entreno/"+id,data).finally(()=>{PEND["entreno/"+id]--})}
+const enPlan=()=>EN.docs.plan||null;
+const enBody=()=>Object.assign({weight:"",height:"",age:"",sex:"hombre",waist:"",fat:"",w:[]},EN.docs.body||{});
+const enSupl=()=>{const s=EN.docs.supl||{};return{creStart:s.creStart||"",cre:Object.assign({},s.cre||{}),water:Object.assign({goal:0,days:{}},s.water||{}),prot:Object.assign({on:false,goal:0,days:{}},s.prot||{})}};
+/* sesiones: las cerradas en orden; la abierta (si hay) aparte */
+function enWorkouts(){return Object.keys(EN.docs).filter(k=>k.startsWith("w-")).map(k=>Object.assign({id:k},EN.docs[k])).sort((a,b)=>String(a.started||"").localeCompare(String(b.started||"")))}
+const enDone=()=>enWorkouts().filter(w=>w.done);
+const enOpen=()=>enWorkouts().filter(w=>!w.done).slice(-1)[0]||null;
+function enSess(id){const p=enPlan();return p?p.sessions.find(s=>s.id===id)||null:null}
+/* regla secuencial: la siguiente después de la última cerrada, sin importar el día */
+function enNext(){const p=enPlan();if(!p||!p.sessions.length)return null;const o=enOpen();if(o&&enSess(o.sid))return enSess(o.sid);
+  const d=enDone().filter(w=>enSess(w.sid)),last=d[d.length-1];if(!last)return p.sessions[0];const i=p.sessions.findIndex(s=>s.id===last.sid);return p.sessions[(i+1)%p.sessions.length]}
+/* semana del bloque = sesiones cerradas desde el inicio del bloque ÷ sesiones por semana */
+function enWeekInfo(){const p=enPlan();if(!p)return{week:1,ord:1,per:4,phase:"normal"};const per=Math.max(1,p.sessions.length),o=enOpen();
+  const n=o&&o.n!=null?o.n:Math.max(0,enDone().length-(p.base||0));const week=Math.floor(n/per)+1;
+  const deload=p.deload&&p.deload.state==="on"&&p.deload.week===week;
+  const phase=deload?"descarga":(p.block==="A"&&week<=(p.readapt||0))?"readapt":"normal";return{week,ord:(n%per)+1,per,phase,n}}
+function enSetsFor(e,phase){return phase==="readapt"||phase==="descarga"?Math.min(2,e.s):e.s}
+const EN_PHASE={readapt:"Readaptación",normal:"Plan completo",descarga:"Semana de descarga"};
+function enPhaseRule(ph){const p=enPlan()||{rules:{}};return ph==="readapt"?p.rules.readapt:ph==="descarga"?"Descarga: 2 series por ejercicio a RPE 6, con 10% menos de carga. Recupera para volver más fuerte.":p.rules.normal}
+/* historial por ejercicio Y variante (m = principal, a = alternativa) */
+function enHist(exId,v){return enDone().filter(w=>(w.sets&&w.sets[exId]||[]).some(x=>x.v===v)).reverse().map(w=>({date:w.date||String(w.finished||w.started||"").slice(0,10),w,sets:w.sets[exId].filter(x=>x.v===v)}))}
+const e1rm=x=>(+x.w||0)*(1+(+x.r||0)/30);
+const bestOf=sets=>sets.reduce((m,x)=>Math.max(m,e1rm(x)),0);
+function enShoulder(){const d=enDone().slice().reverse().find(w=>w.pain&&w.pain.sh);const o=enOpen();
+  if(o&&o.pain&&o.pain.sh)return{date:today(),note:o.pain.note||"",open:true};if(!d)return null;const dt=d.date||String(d.finished).slice(0,10);return dDiff(today(),dt)<=14?{date:dt,note:d.pain.note||""}:null}
+/* decisión de Heracles por ejercicio y variante: subir, mantener o bajar */
+function enCoach(e,v,phase){const p=enPlan()||{},h=enHist(e.id,v),sh=enShoulder();
+  if(!h.length){const ref=v==="m"&&p.refs&&p.refs[e.id];return{act:"base",w:0,text:ref?"Para empezar: "+ref+".":phase==="readapt"?"Carga por sensación (RPE 6-7, 3-4 en reserva).":"Elige una carga que te deje 2-3 repeticiones en reserva."}}
+  const last=h[0].sets,top=Math.max(...last.map(x=>+x.w||0)),allTop=last.length>0&&last.every(x=>(+x.r||0)>=e.hi),under=last.some(x=>(+x.r||0)<e.lo);
+  if(sh&&e.sh)return{act:"bajar",w:r05(top*.85),text:"Registraste molestia en el hombro: baja ~15% ("+r05(top*.85)+" kg) o usa la variante"+(e.alt?" «"+e.alt+"»":"")+". Nunca entrenes con dolor."};
+  if(phase==="descarga")return{act:"bajar",w:r05(top*.9),text:"Semana de descarga: "+r05(top*.9)+" kg (−10%), 2 series a RPE 6."};
+  if(allTop){const a=r05(top*1.025),b=r05(top*1.05),lo=a>top?a:top+.5;return{act:"subir",w:lo,text:"Llegaste al tope ("+e.hi+") en todas las series con "+top+" kg: sube a "+lo+(b>lo?"–"+b:"")+" kg."}}
+  if(under&&h[1]&&h[1].sets.some(x=>(+x.r||0)<e.lo))return{act:"bajar",w:r05(top*.92),text:"Dos sesiones por debajo de "+e.lo+" repeticiones: baja a "+r05(top*.92)+" kg y vuelve a construir."};
+  return{act:"mantener",w:top,text:"Mantén "+top+" kg hasta llegar a "+e.hi+" repeticiones en todas las series."+(phase==="readapt"?" Readaptación: RPE 6-7.":"")}}
+/* estancamiento: el mejor set de la última sesión no supera al de hace 2+ semanas */
+function enStalled(){const p=enPlan();if(!p)return[];const out=[];
+  p.sessions.forEach(s=>s.ex.forEach(e=>["m","a"].forEach(v=>{const h=enHist(e.id,v);if(h.length<2)return;const old=h.find(x=>dDiff(h[0].date,x.date)>=14);if(!old)return;
+    if(bestOf(h[0].sets)<=bestOf(old.sets))out.push({e,v,since:old.date})})));return out}
+function enEnergy(){let n=0,s=0;for(let i=0;i<7;i++){const d=S.days[addDays(today(),-i)];if(d&&d.energy){n++;s+=+d.energy}}return n>=3?s/n:null}
+function enDeloadSuggest(){const p=enPlan();if(!p)return null;const wi=enWeekInfo();if(wi.phase!=="normal")return null;if(p.deload&&(p.deload.state==="on"&&p.deload.week>=wi.week))return null;
+  if(p.deload&&p.deload.state==="no"&&dDiff(today(),p.deload.at)<7)return null;
+  const st=enStalled(),en=enEnergy();if(st.length>=2)return{why:"Te estancaste 2 semanas en "+st.length+" ejercicios ("+st.slice(0,3).map(x=>x.e.n+(x.v==="a"?" (alternativa)":"")).join(", ")+")."};
+  if(en!=null&&en<=2.5)return{why:"Tu energía promedio de 7 días es "+en.toFixed(1)+" de 5."};return null}
+/* racha estilo Duolingo: solo se rompe con MÁS de 2 días seguidos sin entrenar */
+function enStreak(){const dates=[...new Set(enDone().map(w=>w.date||String(w.finished||"").slice(0,10)).filter(Boolean))].sort(),t=today(),runs=[];
+  dates.forEach(d=>{const r=runs[runs.length-1];if(r&&dDiff(d,r.end)<=3)r.end=d;else runs.push({start:d,end:d})});
+  const last=runs[runs.length-1],since=last?dDiff(t,last.end):null,alive=last&&since<=2;
+  const cur=alive?dDiff(t,last.start)+1:0,best=Math.max(cur,...runs.map(r=>dDiff(r.end,r.start)+1),0);
+  const per=Math.max(1,(enPlan()||{sessions:[1,2,3,4]}).sessions.length),wk={};enDone().forEach(w=>{const d=w.date||String(w.finished||"").slice(0,10);if(d){const m=monday(d);wk[m]=(wk[m]||0)+1}});
+  const full=Object.values(wk).filter(n=>n>=per).length;
+  const state=!last?"nueva":since===0?"salvo":since===1?"riesgo":since===2?"ultimo":"perdida";
+  return{cur,best,full,state,since,last:last?last.end:"",start:alive?last.start:"",lostAt:last&&!alive?addDays(last.end,3):""}}
+const EN_STN={nueva:"Aún sin empezar",salvo:"A salvo",riesgo:"En riesgo",ultimo:"Último día para salvarla",perdida:"Perdida"};
+/* creatina y agua */
+function creStreak(){const s=enSupl(),t=today();let d=s.cre[t]?t:addDays(t,-1),n=0;while(s.cre[d]&&(!s.creStart||d>=s.creStart)&&n<2000){n++;d=addDays(d,-1)}return n}
+const dayTot=(o,d)=>((o.days[d]||{}).e||[]).reduce((a,x)=>a+(+x.v||0),0);
+function intakeStreak(o){const t=today();const met=d=>{const x=o.days[d];return x&&(+x.g||o.goal)>0&&dayTot(o,d)>=(+x.g||o.goal)};let d=met(t)?t:addDays(t,-1),n=0;while(met(d)&&n<2000){n++;d=addDays(d,-1)}return n}
+/* métricas: IMC, gasto (Mifflin-St Jeor × 1.55 por 4 entrenos/semana), agua 35 ml/kg, proteína 1.6-2.2 g/kg */
+function enEst(){const b=enBody(),w=+b.weight||0,h=+b.height||0,a=+b.age||0,o={w,h,a};
+  if(w&&h){const hm=h>3?h/100:h;o.bmi=w/(hm*hm)}
+  if(w&&h&&a){const cm=h>3?h:h*100;o.bmr=10*w+6.25*cm-5*a+(b.sex==="mujer"?-161:5);o.tdee=o.bmr*1.55}
+  if(w){o.water=Math.round(w*35/250)*250;o.protLo=Math.round(w*1.6);o.protHi=Math.round(w*2.2);o.prot=Math.round(w*1.8/5)*5}return o}
+/* ---------- SEÑALES de entrenamiento para Heracles (y resumen para Odín) ---------- */
+function enSignals(){const p=enPlan();if(!p)return"";const wi=enWeekInfo(),nx=enNext(),st=enStreak(),o=enOpen(),sp=enSupl(),b=enBody(),es=enEst(),t=today();
+  const L=["SEÑALES DE ENTRENAMIENTO (módulo Entrenamiento, a tu cargo):"];
+  L.push("- Programa: "+p.program+" · bloque "+p.block+", semana "+wi.week+" de "+(p.blockWeeks||8)+" ("+EN_PHASE[wi.phase]+": "+enPhaseRule(wi.phase)+") · nivel "+p.level+" · "+p.shoulder+(p.priorities&&p.priorities.length?" · prioridades: "+p.priorities.join(", "):""));
+  L.push("- Regla secuencial: las sesiones van en orden, no amarradas al día. Siguiente sesión: "+(nx?nx.name:"—")+(o?" (ya empezada hoy: "+Object.values(o.sets||{}).reduce((a,x)=>a+x.length,0)+" series registradas)":"")+".");
+  L.push("- Racha de entrenamiento: "+st.cur+" días ("+EN_STN[st.state]+(st.last?", último entrenamiento el "+st.last:"")+"); mejor racha "+st.best+" días; semanas con "+wi.per+" de "+wi.per+" sesiones: "+st.full+"."+
+    (st.state==="riesgo"?" Si no entrena hoy ni mañana, pierde la racha de "+st.cur+" días.":st.state==="ultimo"?" HOY es el último día: si no entrena hoy, pierde la racha de "+st.cur+" días.":st.state==="perdida"?" La racha se perdió el "+st.lostAt+".":""));
+  const dn=enDone().slice(-4).reverse();if(dn.length)L.push("- Últimas sesiones: "+dn.map(w=>(w.date||"")+" "+w.sname+" ("+Object.values(w.sets||{}).reduce((a,x)=>a+x.length,0)+" series"+(w.pain&&w.pain.sh?", MOLESTIA EN EL HOMBRO"+(w.pain.note?": "+w.pain.note:""):"")+")").join(" | "));
+  else L.push("- Aún no registra ninguna sesión.");
+  if(nx){const dec=nx.ex.map(e=>{const v=(o&&o.vsel&&o.vsel[e.id])||"m",c=enCoach(e,v,wi.phase);return e.n+(v==="a"&&e.alt?" ["+e.alt+"]":"")+": "+c.act+(c.w?" "+c.w+" kg":"")}).join("; ");L.push("- Tu decisión de carga para «"+nx.name+"»: "+dec+".")}
+  const stl=enStalled();if(stl.length)L.push("- Estancados 2+ semanas: "+stl.map(x=>x.e.n+(x.v==="a"?" (alternativa)":"")).join(", ")+".");
+  const dl=enDeloadSuggest();if(dl)L.push("- Propuesta de semana de descarga: "+dl.why);if(p.deload&&p.deload.state==="on")L.push("- Descarga aceptada para la semana "+p.deload.week+".");
+  const sh=enShoulder();if(sh)L.push("- Molestia en el hombro registrada el "+sh.date+(sh.note?" («"+sh.note+"»)":"")+": baja carga o cambia a la variante en empujes y jalones; nunca entrenar con dolor.");
+  L.push("- Creatina: racha de "+creStreak()+" días"+(sp.creStart?" (desde "+sp.creStart+")":"")+"; hoy "+(sp.cre[t]?"tomada":"pendiente")+".");
+  L.push("- Agua: hoy "+dayTot(sp.water,t)+" de "+(sp.water.goal||0)+" ml; racha de "+intakeStreak(sp.water)+" días cumpliendo la meta.");
+  if(sp.prot.on)L.push("- Proteína: hoy "+dayTot(sp.prot,t)+" de "+(sp.prot.goal||0)+" g; racha "+intakeStreak(sp.prot)+" días.");
+  L.push("- Cuerpo: peso "+(b.weight||"—")+" kg, altura "+(b.height||"—")+" m"+(b.age?", edad "+b.age:"")+(b.waist?", cintura "+b.waist+" cm":"")+(b.fat?", grasa "+b.fat+"%":"")+(es.bmi?" · IMC "+es.bmi.toFixed(1):"")+(es.tdee?" · gasto estimado "+Math.round(es.tdee)+" kcal/día":"")+(es.prot?" · proteína sugerida "+es.protLo+"-"+es.protHi+" g/día":"")+".");
+  const wsr=(b.w||[]).slice(-6);if(wsr.length)L.push("- Pesajes: "+wsr.map(x=>x.d+" "+x.kg+" kg").join(", ")+".");
+  return "\n"+L.join("\n")}
+const EN_COACH="\n\nCOMO ENTRENADOR (módulo Entrenamiento): eres motivador intenso, pero con datos reales y sin exagerar. La pérdida de músculo NO ocurre en pocos días: lo que está en riesgo a corto plazo es la racha, el ritmo y el hábito; usa eso para presionar, con la cifra exacta (ej. «si no entrenas hoy ni mañana, pierdes tu racha de 23 días»). Di qué sesión sigue según la regla secuencial. Decide subir, mantener o bajar la carga por ejercicio con el registro y cuánto debe durar el bloque (alargarlo si sigue progresando, cerrarlo si se estanca), y si hay estancamiento de 2 semanas en varios ejercicios o la energía cae, propón una semana de descarga. Si hay molestia en el hombro, sugiere bajar carga o cambiar a la variante y nunca que entrene con dolor.";
+
+/* ---------- Entrenamiento: interfaz ---------- */
+const ENF={},EDR={},VSEL={};let EN_CW=0,ED=null,EN_EDMSG="";
+const enKey=(e,v,side,i)=>e+"|"+v+"|"+side+"|"+i;
+const enTyping=el=>{const a=document.activeElement;return !!(a&&el&&el.contains(a)&&(/^(TEXTAREA|SELECT)$/.test(a.tagName)||a.tagName==="INPUT"&&!/^(checkbox|radio|button)$/.test(a.type)))};
+function enSet(el,h){if(!el)return;if(el.__h===h||enTyping(el))return;const op=[...el.querySelectorAll("details[open][data-d]")].map(d=>d.dataset.d);el.innerHTML=h;el.__h=h;
+  op.forEach(k=>{const d=el.querySelector('details[data-d="'+k+'"]');if(d)d.open=true})}
+function enVar(e){const o=enOpen();return (o&&o.vsel&&o.vsel[e.id])||VSEL[e.id]||"m"}
+/* valor prellenado: la última vez de esa variante (misma serie y lado), o la sugerencia de Heracles */
+function enPrefill(e,v,side,i,c){const k=enKey(e.id,v,side,i);if(EDR[k])return EDR[k];const h=enHist(e.id,v)[0];let w="",r=e.lo;
+  if(h){const ss=h.sets.filter(x=>(x.side||"")===side);const x=ss[i]||ss[ss.length-1]||h.sets[h.sets.length-1];if(x){w=+x.w||"";r=+x.r||e.lo}}
+  else{const cs=enCurSets(e,v,side),x=cs[cs.length-1];if(x){w=+x.w||"";r=+x.r||e.lo}else if(c&&c.w)w=c.w}return{w,r}}
+function enCurSets(e,v,side){const o=enOpen();return o&&o.sets&&o.sets[e.id]?o.sets[e.id].map((x,ix)=>Object.assign({ix},x)).filter(x=>x.v===v&&(x.side||"")===side):[]}
+function enExHTML(e,s,live,wi){const v=e.alt?enVar(e):"m",nm=v==="a"&&e.alt?e.alt:e.n,c=enCoach(e,v,wi.phase),N=enSetsFor(e,wi.phase),p=enPlan();
+  const rest=(p.rest||{})[e.t]||[60,120],ACT={subir:"↑ Sube",mantener:"= Mantén",bajar:"↓ Baja",base:"• Empieza"};
+  let rows="";
+  if(live)(e.pl?["izq","der"]:[""]).forEach(side=>{const done=enCurSets(e,v,side);
+    for(let i=0;i<N;i++){const lab="Serie "+(i+1)+(side?" · "+(side==="izq"?"pierna izq.":"pierna der."):"");
+      if(done[i]){const x=done[i];rows+=`<div class="srow ok"><span class="sl">${esc(lab)}</span><b class="num">${esc(x.w)} kg × ${esc(x.r)}</b><button type="button" class="popx sm" data-undo="${esc(e.id)}" data-ix="${x.ix}" aria-label="Borrar ${esc(lab)}">×</button></div>`;continue}
+      const f=enPrefill(e,v,side,i,c),k=enKey(e.id,v,side,i),nextRow=i===done.length;
+      rows+=`<div class="srow${nextRow?" nx":""}" data-k="${esc(k)}"><span class="sl">${esc(lab)}</span>
+        <span class="stp"><button type="button" class="btn icon" data-step="w" data-d="-1" aria-label="Menos peso">−</button><input type="number" class="num" inputmode="decimal" step="0.5" min="0" data-f="w" value="${esc(f.w)}" aria-label="Peso en kg, ${esc(lab)}"><button type="button" class="btn icon" data-step="w" data-d="1" aria-label="Más peso">+</button><span class="u">kg</span></span>
+        <span class="stp"><button type="button" class="btn icon" data-step="r" data-d="-1" aria-label="Menos repeticiones">−</button><input type="number" class="num" inputmode="numeric" step="1" min="0" data-f="r" value="${esc(f.r)}" aria-label="Repeticiones, ${esc(lab)}"><button type="button" class="btn icon" data-step="r" data-d="1" aria-label="Más repeticiones">+</button><span class="u">reps</span></span>
+        <button type="button" class="btn primary ok" data-ok="${esc(e.id)}" data-side="${side}" data-i="${i}" aria-label="Confirmar ${esc(lab)}"${nextRow?"":" disabled"}>✓</button></div>`;
+}});
+  const anyDone=live&&enCurSets(e,v,"").length+enCurSets(e,v,"izq").length+enCurSets(e,v,"der").length>0;
+  return `<div class="enex" data-ex="${esc(e.id)}"><div class="enexh"><strong>${T(nm)}</strong><span class="num sxr">${N}×${e.lo}${e.hi!==e.lo?"-"+e.hi:""}${e.pl?" por pierna":""}</span><span class="chip ${e.t==="P"?"tp":"ta"}" title="Descanso ${Math.round(rest[0]/60)}-${Math.round(rest[1]/60)} min">${e.t==="P"?"Pesado":"Aislamiento"}</span>${e.ns?`<span class="chip warn">No saltar: cuida el hombro</span>`:""}</div>
+    ${e.alt?`<div class="seg sm" role="group" aria-label="Variante de ${esc(e.n)}"><button type="button" data-var="m" data-e="${esc(e.id)}" aria-pressed="${v==="m"}">Principal</button><button type="button" data-var="a" data-e="${esc(e.id)}" aria-pressed="${v==="a"}">${esc(e.alt)}</button></div>`:""}
+    <div class="sug a-${c.act}"><span><b>${ACT[c.act]||""}</b> ${T(c.text)}</span>${live&&c.w?`<button type="button" class="btn ghost sm" data-use="${esc(e.id)}" data-w="${c.w}">Usar ${c.w} kg</button>`:""}</div>
+    <details class="tec" data-d="tec-${esc(e.id)}"><summary>Técnica</summary><p>${T(e.tec||"Sin indicaciones.")}</p></details>
+    ${live?`<div class="sets">${rows}</div><div class="row"><button type="button" class="btn ghost sm" data-rep="${esc(e.id)}"${anyDone?"":" disabled"}>Repetir serie anterior</button></div>`:""}</div>`}
+function enSessHTML(){const p=enPlan(),nx=enNext(),o=enOpen(),wi=enWeekInfo(),t=today(),dow=(parse(t).getDay()+6)%7;
+  const cal=EN_DOW.map((d,i)=>{const sid=Object.keys(p.cal||{}).find(k=>p.cal[k]===i),ss=sid&&enSess(sid);return `<div class="cd${i===dow?" on":""}"><span>${d}</span><b>${ss?esc(ss.name.split(" – ")[0]):i===6?"Descanso":"Libre"}</b></div>`}).join("");
+  const last={};enDone().forEach(w=>{last[w.sid]=w.date});
+  const body=p.sessions.map(s=>{const live=nx&&s.id===nx.id,open=ENF[s.id]!=null?ENF[s.id]:live,cnt=live&&o?Object.values(o.sets||{}).reduce((a,x)=>a+x.length,0):0;
+    const sub=(live?(o?"En curso · "+cnt+" serie"+(cnt===1?"":"s"):"Te toca"):"")+(last[s.id]?(live?" · ":"")+"Última: "+pretty(last[s.id]):"")||s.ex.length+" ejercicios";
+    return `<section class="card fold enses${live?" next":""}" data-sid="${esc(s.id)}"><h3 class="fold-hh"><button type="button" class="fold-h" data-fold="${esc(s.id)}" aria-expanded="${!!open}"><span class="fold-n">${T(s.name)}</span><span class="fold-s">${T(sub)}</span></button></h3>
+      <div class="fold-b stack"${open?"":" hidden"}>
+      ${live&&!cnt?`<div class="callout"><strong>Calentamiento</strong><span>${T(p.warmup)} Primer ejercicio: ${T(s.ex[0]?s.ex[0].n:"—")}.</span></div>`:""}
+      ${!live?`<p class="hint">Las sesiones van en orden: ahora toca «${T(nx?nx.name:"—")}». Esta queda como referencia.</p>`:""}
+      ${s.ex.map(e=>enExHTML(e,s,live,wi)).join("")}
+      ${live?`<div class="enpain"><label class="chk"><input type="checkbox" id="en-sh"${o&&o.pain&&o.pain.sh?" checked":""}> Molestia en el hombro</label><input type="text" id="en-shn" maxlength="140" placeholder="Qué sentiste (opcional)" value="${esc(o&&o.pain?o.pain.note||"":"")}" aria-label="Nota de la molestia"${o&&o.pain&&o.pain.sh?"":" hidden"}></div>
+        <div class="row"><button type="button" class="btn primary" id="en-finish"${cnt?"":" disabled"}>Terminar sesión</button>${o?`<button type="button" class="btn ghost" id="en-discard">Descartar sesión</button>`:""}<span class="muted" style="font-size:.84rem">Al terminar se marca el hábito «Ejercicio» de hoy.</span></div>`:""}
+      </div></section>`}).join("");
+  return `<div class="encal" aria-label="Calendario de referencia">${cal}</div>
+    <p class="hint"><strong>${esc(EN_PHASE[wi.phase])}</strong> · bloque ${esc(p.block)}, semana <span class="num">${wi.week}</span> de <span class="num">${p.blockWeeks||8}</span>, sesión <span class="num">${wi.ord}</span> de <span class="num">${wi.per}</span>: ${T(enPhaseRule(wi.phase))} Las sesiones van en orden, no amarradas al día: si faltas, al volver haces la que sigue.</p>${body}`}
+function enStreakLine(st,nx){const n=st.cur,nm=nx?"«"+nx.name+"»":"tu siguiente sesión";
+  return {nueva:"¡El primer trabajo te espera! Hoy toca "+nm+". Tu racha empieza con la primera sesión.",
+    salvo:"¡Hazaña cumplida! Racha de "+n+" días a salvo. Lo que sigue: "+nm+".",
+    riesgo:"Tu racha de "+n+" días está EN RIESGO. Toca "+nm+". Si no entrenas hoy ni mañana, pierdes tu racha de "+n+" días.",
+    ultimo:"ÚLTIMO DÍA: si no entrenas hoy, pierdes tu racha de "+n+" días. Toca "+nm+". Unos días no te quitan músculo; lo que se va es el ritmo.",
+    perdida:"La racha se perdió el "+(st.lostAt?pretty(st.lostAt):"—")+". El músculo no se va en unos días: lo que perdiste es el ritmo. Hoy toca "+nm+": empieza la nueva."}[st.state]}
+function enHeadHTML(){const p=enPlan(),st=enStreak(),wi=enWeekInfo(),nx=enNext(),dl=enDeloadSuggest(),sh=enShoulder(),f=portrait("habitos");
+  const tile=(l,v,s)=>`<div class="ent"><span class="l">${l}</span><b class="num">${v}</b>${s?`<span class="s">${s}</span>`:""}</div>`;
+  let ban="";
+  if(dl)ban+=`<div class="callout warn"><strong>Heracles propone una semana de descarga</strong><span>${T(dl.why)} La próxima semana: 2 series por ejercicio a RPE 6 con 10% menos de carga.</span><div class="row"><button type="button" class="btn primary sm" data-deload="on">Aceptar descarga</button><button type="button" class="btn ghost sm" data-deload="no">Ahora no</button></div></div>`;
+  if(p.deload&&p.deload.state==="on"&&p.deload.week>=wi.week)ban+=`<div class="callout"><strong>Descarga aceptada</strong><span>Semana ${p.deload.week} del bloque: 2 series, RPE 6, −10% de carga.</span></div>`;
+  if(wi.week>(p.blockWeeks||8))ban+=`<div class="callout"><strong>Terminó el bloque ${esc(p.block)}</strong><span>Llevas ${wi.week-1} semanas. Cierra con una semana de descarga y empieza el siguiente bloque con cargas nuevas.</span><div class="row"><button type="button" class="btn sm" id="en-newblock">Empezar bloque ${esc(String.fromCharCode((p.block||"A").charCodeAt(0)+1))}</button></div></div>`;
+  if(sh)ban+=`<div class="callout bad"><strong>Molestia en el hombro (${esc(pretty(sh.date))})</strong><span>${sh.note?T(sh.note)+". ":""}En empujes y jalones baja la carga o usa la variante. Nunca entrenes con dolor; si sigue, consúltalo con un profesional.</span></div>`;
+  return `<div class="enhead"><div class="who">${f?`<img src="${f}" alt="">`:""}<div><span class="eyebrow">Heracles · tu entrenador</span><p class="line st-${st.state}">${T(enStreakLine(st,nx))}</p><span class="chip st-${st.state}">${EN_STN[st.state]}</span></div></div>
+    <div class="entiles">${tile("Racha actual",st.cur,"días")}${tile("Mejor racha",st.best,"días")}${tile("Semanas completas",st.full,wi.per+" de "+wi.per+" sesiones")}${tile("Semana del bloque",wi.week,"de "+(p.blockWeeks||8)+" · bloque "+esc(p.block))}</div></div>${ban}`}
+function enCreHTML(){const s=enSupl(),t=today(),m=addDays(monday(t),EN_CW*7);
+  const box=EN_DOW.map((d,i)=>{const dd=addDays(m,i),fut=dd>t;return `<label class="crd${dd===t?" on":""}${fut?" fut":""}"><span>${d}</span><span class="num">${parse(dd).getDate()}</span><input type="checkbox" data-cre="${dd}"${s.cre[dd]?" checked":""}${fut?" disabled":""} aria-label="Creatina ${esc(pretty(dd))}"></label>`}).join("");
+  return `<div class="row between"><h3>Creatina</h3><span class="chip ok">Racha: <span class="num">${creStreak()}</span> días</span></div>
+    <div class="row between"><button type="button" class="btn icon ghost" data-cw="-1" aria-label="Semana anterior">←</button><span class="muted" style="font-size:.84rem">Semana del ${esc(pretty(m))}</span><button type="button" class="btn icon ghost" data-cw="1" aria-label="Semana siguiente"${EN_CW>=0?" disabled":""}>→</button></div>
+    <div class="crow">${box}</div>${s.creStart?`<p class="hint">Contando desde el ${esc(pretty(s.creStart))}.</p>`:""}`}
+function enIntakeHTML(k){const s=enSupl(),o=s[k],t=today(),tot=dayTot(o,t),g=+o.goal||0,u=k==="water"?"ml":"g",pct=g?Math.min(100,Math.round(tot/g*100)):0;
+  const ent=((o.days[t]||{}).e||[]);
+  const quick=k==="water"?[250,500]:[20,30];
+  return `<div class="row between"><h3>${k==="water"?"Agua":"Proteína"}</h3><span class="chip ${intakeStreak(o)?"ok":""}">Racha: <span class="num">${intakeStreak(o)}</span> días</span></div>
+    <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${g}" aria-valuenow="${tot}" aria-label="${k==="water"?"Agua de hoy":"Proteína de hoy"}"><i style="width:${pct}%"></i></div>
+    <div class="row between"><span><b class="num">${tot.toLocaleString("es-MX")}</b> <span class="muted">de</span> <b class="num">${g.toLocaleString("es-MX")}</b> ${u}</span><span class="muted num">${pct}%</span></div>
+    <div class="row">${quick.map(q=>`<button type="button" class="btn" data-add="${k}" data-v="${q}">+${q} ${u}</button>`).join("")}<span class="free"><input type="number" class="num" min="1" step="${k==="water"?50:1}" inputmode="numeric" id="en-free-${k}" placeholder="Otra cantidad" aria-label="Cantidad libre en ${u}"><button type="button" class="btn" data-addfree="${k}">Agregar</button></span></div>
+    ${ent.length?`<ul class="intk">${ent.map((x,i)=>`<li><span class="muted num">${esc(hhmm(x.at))}</span><input type="number" class="num" min="0" value="${esc(x.v)}" data-edit="${k}" data-i="${i}" aria-label="Corregir registro"><span class="u">${u}</span><button type="button" class="popx sm" data-rm="${k}" data-i="${i}" aria-label="Borrar registro">×</button></li>`).join("")}</ul>`:`<p class="hint">Sin registros hoy.</p>`}
+    <div class="row"><label class="field inl">Meta diaria (${u})<input type="number" class="num" min="0" step="${k==="water"?250:5}" id="en-goal-${k}" value="${esc(g||"")}"></label><button type="button" class="btn ghost" data-goal="${k}">Guardar meta</button></div>`}
+function enProtHTML(){const s=enSupl(),sw=`<label class="switch"><input type="checkbox" id="en-prot-on"${s.prot.on?" checked":""}><span>${s.prot.on?"Activada":"Activar registro de proteína"}</span></label>`;return s.prot.on?enIntakeHTML("prot")+sw:`<div class="row between"><h3>Proteína</h3><span class="chip">Apagada</span></div><p class="hint">Cuando la actives: meta en gramos por día y registro rápido como el agua.</p>${sw}`}
+function enChart(ws){if(ws.length<2)return ws.length?`<p class="hint">Un pesaje registrado. Con dos o más verás la tendencia.</p>`:"";const W=320,H=110,P=26,xs=ws.map(x=>parse(x.d).getTime()),ys=ws.map(x=>+x.kg);
+  const x0=Math.min(...xs),x1=Math.max(...xs)||x0+1,y0=Math.min(...ys)-.5,y1=Math.max(...ys)+.5,X=v=>P+(x1===x0?0:(v-x0)/(x1-x0))*(W-P-8),Y=v=>8+(1-(v-y0)/(y1-y0))*(H-P);
+  const pts=ws.map((x,i)=>X(xs[i]).toFixed(1)+","+Y(ys[i]).toFixed(1)).join(" ");
+  return `<svg class="wchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Tendencia de peso: de ${ys[0]} a ${ys[ys.length-1]} kg"><line x1="${P}" y1="${H-P+8}" x2="${W-8}" y2="${H-P+8}" class="ax"/><text x="2" y="${Y(y1-.5)+4}" class="tk">${(y1-.5).toFixed(1)}</text><text x="2" y="${Y(y0+.5)+4}" class="tk">${(y0+.5).toFixed(1)}</text><polyline points="${pts}" class="ln"/>${ws.map((x,i)=>`<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r="3" class="pt"><title>${esc(x.d)}: ${esc(x.kg)} kg</title></circle>`).join("")}<text x="${P}" y="${H-2}" class="tk">${esc(pretty(ws[0].d))}</text><text x="${W-8}" y="${H-2}" class="tk" text-anchor="end">${esc(pretty(ws[ws.length-1].d))}</text></svg>`}
+function enBodyHTML(){const b=enBody(),e=enEst(),s=enSupl(),ws=(b.w||[]).slice().sort((a,c)=>a.d.localeCompare(c.d)).slice(-26);
+  const fld=(id,l,v,ty,ex)=>`<label class="field">${l}<input type="${ty||"number"}" class="num" id="en-b-${id}" value="${esc(v)}" ${ex||""}></label>`;
+  const est=[e.bmi?["IMC",e.bmi.toFixed(1),e.bmi<18.5?"bajo":e.bmi<25?"normal":e.bmi<30?"sobrepeso":"obesidad"]:null,e.tdee?["Gasto diario",Math.round(e.tdee).toLocaleString("es-MX")+" kcal","base "+Math.round(e.bmr).toLocaleString("es-MX")+" × 1.55 (4 entrenos/sem)"]:["Gasto diario","—","agrega tu edad"],
+    e.water?["Agua sugerida",e.water.toLocaleString("es-MX")+" ml","35 ml por kg"]:null,e.prot?["Proteína sugerida",e.protLo+"-"+e.protHi+" g","1.6-2.2 g por kg"]:null].filter(Boolean);
+  return `<div class="row between"><h3>Métricas corporales</h3><span class="muted" style="font-size:.82rem">Heracles usa estos datos en sus cálculos</span></div>
+    <div class="bgrid">${fld("weight","Peso (kg)",b.weight,"number",'step="0.1" min="0" inputmode="decimal"')}${fld("height","Altura (m)",b.height,"number",'step="0.01" min="0" inputmode="decimal"')}${fld("age","Edad",b.age,"number",'min="0" inputmode="numeric"')}<label class="field">Sexo<select id="en-b-sex"><option value="hombre"${b.sex!=="mujer"?" selected":""}>Hombre</option><option value="mujer"${b.sex==="mujer"?" selected":""}>Mujer</option></select></label>${fld("waist","Cintura (cm, opcional)",b.waist,"number",'step="0.5" min="0" inputmode="decimal"')}${fld("fat","Grasa % (opcional)",b.fat,"number",'step="0.1" min="0" inputmode="decimal"')}</div>
+    <div class="row"><button type="button" class="btn" id="en-b-save">Guardar métricas</button><span class="savestate" id="en-b-st"></span></div>
+    <div class="estg">${est.map(x=>`<div class="ent"><span class="l">${x[0]}</span><b class="num">${x[1]}</b><span class="s">${x[2]}</span></div>`).join("")}</div>
+    ${e.water||e.prot?`<div class="row">${e.water?`<button type="button" class="btn ghost sm" data-acc="water" data-v="${e.water}">Usar ${e.water.toLocaleString("es-MX")} ml como meta de agua${+s.water.goal===e.water?" ✓":""}</button>`:""}${e.prot?`<button type="button" class="btn ghost sm" data-acc="prot" data-v="${e.prot}">Usar ${e.prot} g como meta de proteína${+s.prot.goal===e.prot?" ✓":""}</button>`:""}</div><p class="hint">Son estimaciones; acéptalas como meta o ignóralas.</p>`:""}
+    <h4 class="sub">Pesaje semanal (opcional)</h4>
+    <div class="row"><label class="field inl">Peso (kg)<input type="number" class="num" id="en-w-kg" step="0.1" min="0" inputmode="decimal" value="${esc(b.weight||"")}"></label><label class="field inl">Fecha<input type="date" id="en-w-d" value="${today()}" max="${today()}"></label><button type="button" class="btn" id="en-w-add">Registrar pesaje</button></div>
+    ${enChart(ws)}${ws.length?`<ul class="intk">${ws.slice().reverse().slice(0,6).map(x=>`<li><span class="muted">${esc(pretty(x.d))}</span><b class="num">${esc(x.kg)} kg</b><button type="button" class="popx sm" data-wrm="${esc(x.d)}" aria-label="Borrar pesaje del ${esc(pretty(x.d))}">×</button></li>`).join("")}</ul>`:""}`}
+/* ---------- programa y editor ---------- */
+const EN_RANGE=n=>Array.from({length:n},(_,i)=>i+1);
+function enEdHTML(){if(!ED)return"";const opt=(arr,v)=>arr.map(x=>`<option value="${x}"${+v===x?" selected":""}>${x}</option>`).join("");
+  return ED.sessions.map((s,si)=>`<div class="edses" data-si="${si}"><div class="row"><label class="field grow">Sesión<input type="text" data-ed="name" value="${esc(s.name)}"></label><label class="field">Día de referencia<select data-ed="cal"><option value="-1">Sin día</option>${EN_DOW.map((d,i)=>`<option value="${i}"${ED.cal[s.id]===i?" selected":""}>${d}</option>`).join("")}</select></label></div>
+    ${s.ex.map((e,ei)=>`<div class="edex" data-ei="${ei}"><div class="edrow"><label class="field grow">Ejercicio<input type="text" data-ex="n" value="${esc(e.n)}"></label><label class="field">Tipo<select data-ex="t"><option value="P"${e.t==="P"?" selected":""}>Pesado [P]</option><option value="A"${e.t==="A"?" selected":""}>Aislamiento [A]</option></select></label><label class="field">Series<select data-ex="s">${opt(EN_RANGE(8),e.s)}</select></label><label class="field">Reps mín.<select data-ex="lo">${opt(EN_RANGE(30),e.lo)}</select></label><label class="field">Reps máx.<select data-ex="hi">${opt(EN_RANGE(30),e.hi)}</select></label></div>
+      <div class="edrow"><label class="field grow">Alternativa (variante)<input type="text" data-ex="alt" value="${esc(e.alt||"")}" placeholder="Opcional"></label><label class="chk"><input type="checkbox" data-ex="pl"${e.pl?" checked":""}> Por pierna</label><label class="chk"><input type="checkbox" data-ex="ns"${e.ns?" checked":""}> No saltar</label><label class="chk"><input type="checkbox" data-ex="sh"${e.sh?" checked":""}> Carga el hombro</label></div>
+      <label class="field">Técnica<textarea rows="2" data-ex="tec">${esc(e.tec||"")}</textarea></label>
+      <div class="row"><button type="button" class="btn ghost sm" data-mv="-1"${ei?"":" disabled"} aria-label="Subir ejercicio">↑</button><button type="button" class="btn ghost sm" data-mv="1"${ei<s.ex.length-1?"":" disabled"} aria-label="Bajar ejercicio">↓</button><button type="button" class="btn ghost sm danger" data-exdel>Quitar</button></div></div>`).join("")}
+    <button type="button" class="btn ghost sm" data-exadd>+ Agregar ejercicio</button></div>`).join("")}
+function enProgHTML(){const p=enPlan(),r=p.rest||{P:[120,180],A:[60,120]};
+  const f=(id,l,v,ex)=>`<label class="field">${l}<input type="text" id="en-p-${id}" value="${esc(v)}" ${ex||""}></label>`;
+  return `<div class="grid2">${f("program","Programa",p.program)}${f("start","Inicio",p.startLabel)}${f("level","Nivel",p.level)}${f("shoulder","Hombro",p.shoulder)}${f("prio","Prioridades (separadas por coma)",(p.priorities||[]).join(", "))}${f("warm","Calentamiento",p.warmup)}</div>
+    <div class="bgrid"><label class="field">Bloque<select id="en-p-block">${"ABCDEF".split("").map(x=>`<option${p.block===x?" selected":""}>${x}</option>`).join("")}</select></label><label class="field">Semanas por bloque<select id="en-p-bw">${EN_RANGE(16).map(x=>`<option${(p.blockWeeks||8)===x?" selected":""}>${x}</option>`).join("")}</select></label><label class="field">Semanas de readaptación<select id="en-p-ra">${[0,1,2,3,4].map(x=>`<option${(p.readapt||0)===x?" selected":""}>${x}</option>`).join("")}</select></label>
+      <label class="field">Descanso pesado (min)<select id="en-p-rp">${[[60,120],[90,150],[120,180],[150,240],[180,300]].map(x=>`<option value="${x.join("-")}"${r.P[0]===x[0]?" selected":""}>${x[0]/60}-${x[1]/60}</option>`).join("")}</select></label><label class="field">Descanso aislamiento (min)<select id="en-p-ra2">${[[45,90],[60,120],[90,150]].map(x=>`<option value="${x.join("-")}"${r.A[0]===x[0]?" selected":""}>${x[0]/60}-${x[1]/60}</option>`).join("")}</select></label></div>
+    <p class="hint">${T(p.rules.prog)}</p>
+    <div class="row"><button type="button" class="btn" id="en-p-save">Guardar programa</button><span class="savestate" id="en-p-st"></span></div>
+    <h4 class="sub">Ejercicios</h4>
+    ${ED?`${EN_EDMSG?`<p class="hint" role="status">${T(EN_EDMSG)}</p>`:""}<div id="en-ed" class="stack">${enEdHTML()}</div><div class="row"><button type="button" class="btn primary" id="en-ed-save">Guardar plan</button><button type="button" class="btn ghost" id="en-ed-cancel">Cancelar</button></div>`:`<div class="row"><button type="button" class="btn" id="en-ed-open">Editar ejercicios</button></div>`}
+    <details class="paste" data-d="paste"><summary>Pegar lista</summary><p class="hint">Un encabezado por sesión y una línea por ejercicio: «- Ejercicio [P] 3×6-8 (alternativa) — técnica». Agrega «por pierna» después del rango si aplica. Se carga en el editor para que lo revises antes de guardar; el historial se conserva para los ejercicios con el mismo nombre.</p><textarea id="en-paste" rows="8" placeholder="UPPER A – Fuerza&#10;- Press inclinado con mancuernas [P] 3×6-8 — técnica"></textarea><div class="row"><button type="button" class="btn" id="en-paste-go">Cargar en el editor</button></div></details>`}
+function renderEntreno(){const root=$("en-root");if(!root)return;
+  if(!EN.loaded||!enPlan()){root.innerHTML=`<div class="empty">${db?"Preparando tu plan de entrenamiento…":"Abre el centro de mando con tu sesión de Claude iniciada para ver tu entrenamiento."}</div>`;root.__built=false;return}
+  if(!root.__built){root.innerHTML=`<div class="card stack" id="en-head"></div><div class="stack" id="en-sess"></div><div class="grid2 engrid"><div class="stack"><div class="card stack" id="en-cre"></div><div class="card stack" id="en-prot"></div></div><div class="card stack" id="en-water"></div></div><div class="card stack" id="en-body"></div>
+    <section class="card fold" id="en-progf"><h3 class="fold-hh"><button type="button" class="fold-h" data-fold="__prog" aria-expanded="false"><span class="fold-n">Programa y ejercicios</span><span class="fold-s" id="en-prog-s"></span></button></h3><div class="fold-b stack" id="en-prog" hidden></div></section>`;root.__built=true}
+  enSet($("en-head"),enHeadHTML());enSet($("en-sess"),enSessHTML());enSet($("en-cre"),enCreHTML());enSet($("en-water"),enIntakeHTML("water"));enSet($("en-prot"),enProtHTML());enSet($("en-body"),enBodyHTML());
+  const p=enPlan(),po=!!ENF.__prog;$("en-prog-s").textContent=p.program+" · "+p.sessions.length+" sesiones · "+p.sessions.reduce((a,s)=>a+s.ex.length,0)+" ejercicios";
+  const pf=$("en-progf").querySelector(".fold-h");pf.setAttribute("aria-expanded",String(po));$("en-prog").hidden=!po;if(po)enSet($("en-prog"),enProgHTML())}
+/* ---------- acciones ---------- */
+function enNewWorkout(){const nx=enNext(),wi=enWeekInfo(),vs={};nx.ex.forEach(e=>{if(VSEL[e.id])vs[e.id]=VSEL[e.id]});
+  const id=enId("w-");const w={sid:nx.id,sname:nx.name,n:wi.n,week:wi.week,phase:wi.phase,block:enPlan().block,date:today(),started:nowISO(),done:false,sets:{},pain:{sh:false,note:""},vsel:vs};return{id,w}}
+function enSaveW(id,w){const o=Object.assign({},w);delete o.id;return enPut(id,o)}
+function enAddSet(exId,side,wv,rv){let o=enOpen(),id;if(o){id=o.id}else{const n=enNewWorkout();id=n.id;o=n.w}
+  const e=(enSess(o.sid)||{ex:[]}).ex.find(x=>x.id===exId);if(!e)return;const v=e.alt?((o.vsel&&o.vsel[exId])||VSEL[exId]||"m"):"m";
+  o.sets=o.sets||{};(o.sets[exId]=o.sets[exId]||[]).push({v,w:+wv||0,r:+rv||0,side:side||"",at:nowISO()});enSaveW(id,o);
+  Object.keys(EDR).forEach(k=>{if(k.startsWith(exId+"|"))delete EDR[k]});enRest(e);renderEntreno()}
+/* temporizador de descanso: [P] 2-3 min, [A] 1-2 min, con aviso al terminar */
+let EN_T=null,EN_TI=0;
+function enBeep(){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),o=c.createOscillator(),g=c.createGain();o.frequency.value=880;o.connect(g);g.connect(c.destination);g.gain.setValueAtTime(.18,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.6);o.start();o.stop(c.currentTime+.62)}catch(e){}try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}}
+function enRest(e){const r=((enPlan()||{}).rest||{})[e.t]||(e.t==="P"?[120,180]:[60,120]);EN_T={name:e.n,min:r[0],max:r[1],end:Date.now()+r[0]*1000,start:Date.now(),done:false};clearInterval(EN_TI);EN_TI=setInterval(enTick,250);enTick()}
+const mmss=s=>Math.floor(s/60)+":"+pad(Math.floor(s%60));
+function enTick(){const b=$("en-timer");if(!b)return;if(!EN_T){b.hidden=true;clearInterval(EN_TI);return}const left=Math.max(0,(EN_T.end-Date.now())/1000),el=(Date.now()-EN_T.start)/1000;
+  if(left<=0&&!EN_T.done){EN_T.done=true;enBeep();toast("Descanso listo: siguiente serie de "+EN_T.name)}
+  if(EN_T.done&&el>EN_T.max+30){EN_T=null;b.hidden=true;clearInterval(EN_TI);return}
+  b.hidden=false;b.classList.toggle("done",EN_T.done);
+  const h=`<span class="tl">${EN_T.done?"Descanso listo":"Descanso"}</span><b class="num">${EN_T.done?mmss(el):mmss(left)}</b><span class="tn">${T(EN_T.done?"Puedes extender hasta "+mmss(EN_T.max)+" · "+EN_T.name:EN_T.name+" · "+mmss(EN_T.min)+"-"+mmss(EN_T.max))}</span><button type="button" class="btn sm" data-tm="30">+30 s</button><button type="button" class="btn ghost sm" data-tm="x">${EN_T.done?"Cerrar":"Saltar"}</button>`;
+  if(b.__h!==h){b.innerHTML=h;b.__h=h}}
+$("en-timer").addEventListener("click",e=>{const x=e.target.closest("button[data-tm]");if(!x||!EN_T)return;if(x.dataset.tm==="x"){EN_T=null;enTick();return}EN_T.end=Math.max(EN_T.end,Date.now())+30000;EN_T.done=false;enTick()});
+function enMarkHabit(day){const h=cfg().habits.find(x=>/ejercicio|gym|entren/i.test(x.name));if(!h)return "";const d=JSON.parse(JSON.stringify(dayData(day)));delete d.id;
+  d.date=day;d.habits=Object.assign({},d.habits||{},{[h.id]:true});d.updated=nowISO();S.days[day]=d;save("days/"+day,d);return h.name}
+function enFinish(){const o=enOpen();if(!o)return;const id=o.id,w=Object.assign({},o);w.done=true;w.finished=nowISO();w.date=today();enSaveW(id,w);
+  const hn=enMarkHabit(today());EN_T=null;enTick();ENF[o.sid]=false;
+  const st=enStreak();toast("Sesión completa: "+o.sname+(hn?" · «"+hn+"» marcado en Hoy":" · no encontré un hábito «Ejercicio» en tu Perfil")+" · racha "+st.cur+" días");
+  try{const a=SC.agents.habitos;if(a){bubble(a,"¡Trabajo cumplido! "+o.sname+". Racha: "+st.cur+" días.",4200);a.emote={k:"♥",until:performance.now()+2500}}}catch(e){}
+  renderAll()}
+function enIntakeAdd(k,v){v=Math.round(+v||0);if(v<=0){toast("Escribe una cantidad mayor que cero.");return}const s=enSupl(),o=s[k],t=today();const d=o.days[t]||{g:o.goal,e:[]};d.g=+o.goal||d.g||0;d.e=(d.e||[]).concat([{v,at:nowISO()}]);o.days=Object.assign({},o.days,{[t]:d});s[k]=o;enPut("supl",s);renderEntreno()}
+function enSuplSave(fn){const s=enSupl();fn(s);enPut("supl",s);renderEntreno()}
+/* clicks */
+$("p-entreno").addEventListener("click",e=>{const B=sel=>e.target.closest(sel);let b;
+  if(b=B("button[data-fold]")){const k=b.dataset.fold,cur=b.getAttribute("aria-expanded")==="true";ENF[k]=!cur;$("en-sess").__h=null;renderEntreno();return}
+  if(b=B("button[data-step]")){const row=b.closest(".srow"),inp=row.querySelector('input[data-f="'+b.dataset.step+'"]'),st=b.dataset.step==="w"?(row.closest(".enex")&&enFindEx(row.closest(".enex").dataset.ex).t==="P"?2.5:1):1;
+    let v=(+inp.value||0)+st*(+b.dataset.d);v=Math.max(0,Math.round(v*2)/2);inp.value=v;const k=row.dataset.k,cur=EDR[k]||{w:row.querySelector('input[data-f="w"]').value,r:row.querySelector('input[data-f="r"]').value};cur[b.dataset.step]=v;EDR[k]=cur;return}
+  if(b=B("button[data-ok]")){const row=b.closest(".srow"),w=row.querySelector('input[data-f="w"]').value,r=row.querySelector('input[data-f="r"]').value;if(!(+r>0)){toast("Anota cuántas repeticiones hiciste.");return}enAddSet(b.dataset.ok,b.dataset.side,w,r);return}
+  if(b=B("button[data-rep]")){const e2=enFindEx(b.dataset.rep),o=enOpen(),v=e2.alt?enVar(e2):"m";if(!o)return;const all=(o.sets[e2.id]||[]).filter(x=>x.v===v);const last=all[all.length-1];if(!last)return;
+    let side=last.side||"";if(e2.pl){const nI=enCurSets(e2,v,"izq").length,nD=enCurSets(e2,v,"der").length;side=nI<=nD?"izq":"der";const ref=all.filter(x=>x.side===side).slice(-1)[0];if(ref){enAddSet(e2.id,side,ref.w,ref.r);return}}
+    if(enCurSets(e2,v,side).length>=enSetsFor(e2,enWeekInfo().phase)){toast("Ya completaste las series de este ejercicio.");return}enAddSet(e2.id,side,last.w,last.r);return}
+  if(b=B("button[data-undo]")){const o=enOpen();if(!o)return;const w=Object.assign({},o),l=(w.sets[b.dataset.undo]||[]).slice();l.splice(+b.dataset.ix,1);w.sets=Object.assign({},w.sets,{[b.dataset.undo]:l});enSaveW(o.id,w);renderEntreno();return}
+  if(b=B("button[data-var]")){const id=b.dataset.e,o=enOpen();VSEL[id]=b.dataset.var;if(o){const w=Object.assign({},o);w.vsel=Object.assign({},w.vsel||{},{[id]:b.dataset.var});enSaveW(o.id,w)}renderEntreno();return}
+  if(b=B("button[data-use]")){const ex=b.closest(".enex");ex.querySelectorAll(".srow[data-k]").forEach(r=>{const i=r.querySelector('input[data-f="w"]');i.value=b.dataset.w;EDR[r.dataset.k]={w:+b.dataset.w,r:+r.querySelector('input[data-f="r"]').value||0}});toast("Peso sugerido en las series pendientes");return}
+  if(b=B("#en-finish")){enFinish();return}
+  if(b=B("#en-discard")){if(b.dataset.sure!=="1"){b.dataset.sure="1";b.textContent="¿Seguro? Toca otra vez";setTimeout(()=>{if(document.body.contains(b)){b.dataset.sure="";b.textContent="Descartar sesión"}},4000);return}const o=enOpen();if(o){del("entreno/"+o.id);delete EN.docs[o.id];EN_T=null;enTick();toast("Sesión descartada");renderEntreno()}return}
+  if(b=B("button[data-deload]")){const p=JSON.parse(JSON.stringify(enPlan())),wi=enWeekInfo();p.deload=b.dataset.deload==="on"?{state:"on",week:wi.ord===1&&!enOpen()?wi.week:wi.week+1,at:today()}:{state:"no",at:today()};enPut("plan",p);toast(b.dataset.deload==="on"?"Descarga programada para la semana "+p.deload.week:"Heracles lo vuelve a revisar en 7 días");renderEntreno();return}
+  if(b=B("#en-newblock")){const p=JSON.parse(JSON.stringify(enPlan()));p.block=String.fromCharCode((p.block||"A").charCodeAt(0)+1);p.base=enDone().length;p.deload=null;enPut("plan",p);toast("Bloque "+p.block+": semana 1");renderEntreno();return}
+  if(b=B("button[data-cw]")){EN_CW=Math.min(0,EN_CW+(+b.dataset.cw));renderEntreno();return}
+  if(b=B("button[data-add]")){enIntakeAdd(b.dataset.add,b.dataset.v);return}
+  if(b=B("button[data-addfree]")){const i=$("en-free-"+b.dataset.addfree);enIntakeAdd(b.dataset.addfree,i.value);i.value="";return}
+  if(b=B("button[data-rm]")){const k=b.dataset.rm;enSuplSave(s=>{const t=today(),d=Object.assign({},s[k].days[t]);d.e=(d.e||[]).slice();d.e.splice(+b.dataset.i,1);s[k].days=Object.assign({},s[k].days,{[t]:d})});return}
+  if(b=B("button[data-goal]")){const k=b.dataset.goal,v=Math.round(+$("en-goal-"+k).value||0);enSuplSave(s=>{s[k].goal=v;const t=today();if(s[k].days[t])s[k].days=Object.assign({},s[k].days,{[t]:Object.assign({},s[k].days[t],{g:v})})});toast("Meta guardada: "+v.toLocaleString("es-MX")+(k==="water"?" ml":" g"));return}
+  if(b=B("button[data-acc]")){const k=b.dataset.acc,v=+b.dataset.v;enSuplSave(s=>{s[k].goal=v;const t=today();if(s[k].days[t])s[k].days=Object.assign({},s[k].days,{[t]:Object.assign({},s[k].days[t],{g:v})})});toast(k==="water"?"Meta de agua: "+v.toLocaleString("es-MX")+" ml":"Meta de proteína: "+v+" g"+(enSupl().prot.on?"":" (actívala para registrar)"));return}
+  if(b=B("#en-b-save")){const g=id=>$("en-b-"+id).value.trim(),bd=enBody();Object.assign(bd,{weight:g("weight")?+g("weight"):"",height:g("height")?+g("height"):"",age:g("age")?+g("age"):"",sex:$("en-b-sex").value,waist:g("waist")?+g("waist"):"",fat:g("fat")?+g("fat"):""});
+    enPut("body",bd);$("en-b-st").textContent="Guardado";renderEntreno();return}
+  if(b=B("#en-w-add")){const kg=+$("en-w-kg").value,d=$("en-w-d").value||today();if(!(kg>0)){toast("Escribe tu peso en kg.");return}const bd=enBody();bd.w=(bd.w||[]).filter(x=>x.d!==d).concat([{d,kg}]).sort((a,c)=>a.d.localeCompare(c.d));
+    if(d>=(bd.w.map(x=>x.d).filter(x=>x!==d).sort().slice(-1)[0]||""))bd.weight=kg;enPut("body",bd);toast("Pesaje registrado: "+kg+" kg");renderEntreno();return}
+  if(b=B("button[data-wrm]")){const bd=enBody();bd.w=(bd.w||[]).filter(x=>x.d!==b.dataset.wrm);enPut("body",bd);renderEntreno();return}
+  if(b=B("#en-p-save")){const p=JSON.parse(JSON.stringify(enPlan())),g=id=>$("en-p-"+id).value.trim(),rr=v=>v.split("-").map(Number);
+    Object.assign(p,{program:g("program")||p.program,startLabel:g("start"),level:g("level"),shoulder:g("shoulder"),priorities:g("prio").split(",").map(x=>x.trim()).filter(Boolean),warmup:g("warm")||p.warmup,block:$("en-p-block").value,blockWeeks:+$("en-p-bw").value,readapt:+$("en-p-ra").value,rest:{P:rr($("en-p-rp").value),A:rr($("en-p-ra2").value)}});
+    enPut("plan",p);$("en-p-st").textContent="Guardado";$("en-prog").__h=null;renderEntreno();return}
+  if(b=B("#en-ed-open")){const p=enPlan();ED={sessions:JSON.parse(JSON.stringify(p.sessions)),cal:Object.assign({},p.cal)};EN_EDMSG="";$("en-prog").__h=null;renderEntreno();return}
+  if(b=B("#en-ed-cancel")){ED=null;EN_EDMSG="";$("en-prog").__h=null;renderEntreno();return}
+  if(b=B("#en-ed-save")){enEdSave();return}
+  if(b=B("#en-paste-go")){const txt=$("en-paste").value,base=ED?ED.sessions:enPlan().sessions,ss=enParse(txt,base);if(!ss.length){toast("No reconocí ejercicios. Usa el formato «- Ejercicio [P] 3×6-8 — técnica».");return}
+    const cal={},pc=enPlan().cal||{},def=[0,1,3,5];ss.forEach((s,i)=>{cal[s.id]=pc[s.id]!=null?pc[s.id]:def[i]!=null?def[i]:-1});ED={sessions:ss,cal};
+    EN_EDMSG="Plan cargado: "+ss.length+" sesiones y "+ss.reduce((a,s)=>a+s.ex.length,0)+" ejercicios. Revísalo y pulsa «Guardar plan».";$("en-paste").value="";$("en-prog").__h=null;renderEntreno();return}
+  const ex=B(".edex"),se=B(".edses");
+  if(ED&&se&&(b=B("button[data-exadd]"))){ED.sessions[+se.dataset.si].ex.push({id:enId("e"),n:"Nuevo ejercicio",t:"A",s:2,lo:8,hi:12,alt:"",tec:"",pl:false,ns:false,sh:false});enEdRender();return}
+  if(ED&&ex&&(b=B("button[data-mv]"))){const L=ED.sessions[+se.dataset.si].ex,i=+ex.dataset.ei,j=i+(+b.dataset.mv);if(j<0||j>=L.length)return;[L[i],L[j]]=[L[j],L[i]];enEdRender();return}
+  if(ED&&ex&&(b=B("button[data-exdel]"))){ED.sessions[+se.dataset.si].ex.splice(+ex.dataset.ei,1);enEdRender();return}});
+function enFindEx(id){const p=enPlan();for(const s of p.sessions)for(const e of s.ex)if(e.id===id)return e;return{id,t:"A",ex:[]}}
+function enEdRender(){const el=$("en-ed");if(el){el.innerHTML=enEdHTML()}$("en-prog").__h=null}
+function enEdSave(){if(!ED)return;const bad=[];ED.sessions.forEach(s=>{if(!s.name.trim())bad.push("una sesión sin nombre");s.ex.forEach(e=>{if(!e.n.trim())bad.push("un ejercicio sin nombre en "+s.name);if(e.lo>e.hi){const t=e.lo;e.lo=e.hi;e.hi=t}})});
+  if(bad.length){toast("Revisa: "+bad[0]);return}if(!ED.sessions.some(s=>s.ex.length)){toast("El plan necesita al menos un ejercicio.");return}
+  const p=JSON.parse(JSON.stringify(enPlan()));p.sessions=ED.sessions.filter(s=>s.ex.length);p.cal={};p.sessions.forEach(s=>{if(ED.cal[s.id]!=null&&ED.cal[s.id]>=0)p.cal[s.id]=ED.cal[s.id]});
+  enPut("plan",p);ED=null;EN_EDMSG="";$("en-prog").__h=null;toast("Plan guardado: "+p.sessions.length+" sesiones");renderEntreno()}
+$("p-entreno").addEventListener("input",e=>{const t=e.target;
+  if(t.matches(".srow input[data-f]")){const row=t.closest(".srow");EDR[row.dataset.k]={w:row.querySelector('input[data-f="w"]').value,r:row.querySelector('input[data-f="r"]').value};return}
+  if(ED&&t.closest(".edses")){const se=t.closest(".edses"),s=ED.sessions[+se.dataset.si],ex=t.closest(".edex");
+    if(!ex){if(t.dataset.ed==="name")s.name=t.value;if(t.dataset.ed==="cal")ED.cal[s.id]=+t.value;return}
+    const e=s.ex[+ex.dataset.ei],k=t.dataset.ex;if(!k)return;e[k]=t.type==="checkbox"?t.checked:/^(s|lo|hi)$/.test(k)?+t.value:k==="t"?t.value:t.value}});
+$("p-entreno").addEventListener("change",e=>{const t=e.target;
+  if(t.matches("input[data-cre]")){const d=t.dataset.cre,on=t.checked;enSuplSave(s=>{if(on)s.cre[d]=true;else delete s.cre[d];if(on&&(!s.creStart||d<s.creStart))s.creStart=d});return}
+  if(t.id==="en-prot-on"){enSuplSave(s=>{s.prot.on=t.checked});return}
+  if(t.matches("input[data-edit]")){const k=t.dataset.edit,v=Math.max(0,Math.round(+t.value||0));enSuplSave(s=>{const td=today(),d=Object.assign({},s[k].days[td]);d.e=(d.e||[]).slice();if(!d.e[+t.dataset.i])return;d.e[+t.dataset.i]=Object.assign({},d.e[+t.dataset.i],{v});if(!v)d.e.splice(+t.dataset.i,1);s[k].days=Object.assign({},s[k].days,{[td]:d})});t.blur();return}
+  if(t.id==="en-sh"||t.id==="en-shn"){const o=enOpen(),sh=$("en-sh").checked,note=$("en-shn")?$("en-shn").value.trim():"";
+    if(!o){const n=enNewWorkout();n.w.pain={sh,note};enSaveW(n.id,n.w)}else{const w=Object.assign({},o);w.pain={sh,note};enSaveW(o.id,w)}
+    if(t.id==="en-sh"&&sh)toast("Anotado. Heracles bajará la carga en empujes y jalones: nunca entrenes con dolor.");renderEntreno();return}});
+$("p-entreno").addEventListener("keydown",e=>{if(e.key!=="Enter")return;const t=e.target;if(t.id==="en-free-water"||t.id==="en-free-prot"){e.preventDefault();const k=t.id.slice(8);enIntakeAdd(k,t.value);t.value=""}
+  if(t.matches(".srow input[data-f]")){e.preventDefault();const ok=t.closest(".srow").querySelector("button[data-ok]");if(ok)ok.click()}});
+/* Heracles vigila la racha: avisa una vez al día cuando entra en riesgo */
+function enWatch(){if(!EN.loaded||!enPlan())return;const st=enStreak();if(st.state!=="riesgo"&&st.state!=="ultimo")return;const k="kasanov:enwarn:v1",v=today()+"|"+st.state;
+  try{if(localStorage.getItem(k)===v)return;localStorage.setItem(k,v)}catch(e){return}const nx=enNext(),msg=st.state==="ultimo"?"¡Último día! Si no entrenas hoy pierdes tu racha de "+st.cur+" días. Toca "+(nx?nx.name:"tu sesión")+".":"Racha de "+st.cur+" días en riesgo: si no entrenas hoy ni mañana, la pierdes. Toca "+(nx?nx.name:"tu sesión")+".";
+  setTimeout(()=>{try{const a=SC.agents.habitos;if(a){bubble(a,msg,6500);a.emote={k:"!",until:performance.now()+3000}}}catch(e){}toast("Heracles: "+msg)},2500)}
 /* =================== PERSONAL: HOY =================== */
 /* Dos secciones desplegables: Actividades del día y Bitácora. Lo que cambias es un borrador en memoria
    hasta que pulsas Guardar; entonces se escriben los mismos campos de siempre en days/{fecha}. */
@@ -2661,11 +3112,11 @@ function renderAll(){
   $("weekpill").textContent=isoWeek(today())+" · semana "+(weekIndex(today())+1)+" del sistema";
   ensureLayout();
   const v=VIEW;
-  if(v==="nexo")renderNexo();if(v==="hoy")renderHoy();if(v==="semana")renderSemana();
+  if(v==="nexo")renderNexo();if(v==="hoy")renderHoy();if(v==="semana")renderSemana();if(v==="entreno")renderEntreno();try{enWatch()}catch(e){}
   if(v==="proyectos")renderProyectos();if(v==="habilidades")renderHabilidades();if(v==="repaso")renderRepaso();if(v==="finanzas")renderFinanzas();
   try{renderInbox()}catch(e){}
   try{renderChat();renderExp()}catch(e){}
-  if(groupOf(v)==="sistema")renderForce();if(v==="revisiones")renderReview();if(v==="mejoras")renderMejoras();if(v==="escuadron")renderEscuadron();if(v==="ajustes")renderAjustes();
+  if(groupOf(v)==="sistema")renderForce();if(v==="revisiones")renderReview();if(v==="mejoras")renderMejoras();if(v==="escuadron")renderEscuadron();if(v==="ajustes")renderAjustes();if(v==="diagnostico")renderDiag();
   try{renderProfBtn()}catch(e){}
   if(!$("fi-back").hidden)renderFicha();
 }
@@ -2702,6 +3153,7 @@ let rT;function soon(){clearTimeout(rT);rT=setTimeout(renderAll,60)}
   db.doc("system/board").onSnapshot(s=>{if(!(PEND["system/board"]>0))S.board=s.exists?s.data():null;soon()},onErr);
   db.doc("profile/main").onSnapshot(s=>{if(!(PEND["profile/main"]>0))S.profile=s.exists?s.data():null;soon();setTimeout(ghBoot,800)},onErr);
   db.doc("signals/github").onSnapshot(s=>{if(!(PEND["signals/github"]>0))S.signals=s.exists?s.data():null;soon()},onErr);
+  db.collection("entreno").onSnapshot(s=>{enLoad(s);soon()},onErr);
   db.collection("quests").onSnapshot(s=>{const o={};s.docs.forEach(d=>{o[d.id]=d.data()});S.quests=o;soon()},onErr);
 })();
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)renderAll()});

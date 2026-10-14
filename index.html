@@ -18,7 +18,7 @@
     <div class="hdr-r">
       <span class="weekpill" id="weekpill">Semana —</span>
       <button class="iconbtn" type="button" id="money-toggle" aria-pressed="false" title="Ocultar las cifras de dinero"></button>
-      <button class="iconbtn prof" type="button" id="prof-btn" aria-haspopup="dialog" aria-label="Ficha del comandante" title="Ficha del comandante"><span id="prof-av"></span><b class="prof-n" id="prof-n" hidden>0</b></button>
+      <button class="iconbtn prof" type="button" id="prof-btn" aria-haspopup="dialog" aria-label="Perfil" title="Perfil"><span id="prof-av"></span><b class="prof-n" id="prof-n" hidden>0</b></button>
       <button class="iconbtn gear" type="button" id="gear" aria-pressed="false" aria-label="Sistema y mejora" title="Sistema y mejora"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
     </div>
   </header>
@@ -75,7 +75,7 @@
             <textarea id="c-text" rows="2" placeholder="Escribe tu mensaje…"></textarea>
             <div class="row">
               <button class="btn primary" type="submit" id="c-send">Enviar</button>
-              <button class="btn odin-only" type="button" id="c-run">Desplegar misión</button>
+              <button class="btn odin-only" type="button" id="c-ask">Solo preguntarle a Odín</button>
               <button class="btn odin-only" type="button" id="c-log">Registrar avance</button>
               <button class="btn danger" type="button" id="c-stop" hidden>Detener</button>
             </div>
@@ -85,7 +85,7 @@
             <summary>Misiones rápidas</summary>
           <div class="quick" id="quick">
 
-            <button type="button" data-q="Con mis datos de hoy y de esta semana, define la misión del día y el foco. Que sea concreta y alcanzable.">Planear mi día</button>
+            <button type="button" data-q="Con mis datos de hoy y de esta semana, define la misión del día y el foco. Que sea concreta y alcanzable." data-all="1">Planear mi día</button>
             <button type="button" data-q="Con base en mis habilidades probadas y en práctica, mis proyectos y lo que disfruto construir, ¿qué caminos profesionales tienen más sentido para mí hoy? Compara 2 o 3 con pros y contras reales y propone un experimento pequeño para probar el más prometedor esta semana.">¿Cuál es mi camino?</button>
             <button type="button" data-q="Propón el siguiente proyecto personal que pueda construir con vibe coding y mis habilidades reales, que me haga crecer y sirva para mostrar en mi portafolio, y el primer paso para hoy.">Siguiente proyecto</button>
             <button type="button" data-q="Convierte lo que aprendí en los últimos días en tarjetas de repaso útiles.">Generar tarjetas</button>
@@ -131,8 +131,8 @@
   <!-- PERSONAL -->
   <section class="group" id="g-personal" role="tabpanel" aria-labelledby="tab-personal" hidden style="--gc:var(--c3)">
     <div class="ghead">
-      <div><h2>Personal</h2><p>Tu día y cómo va la semana. Tus hábitos se editan en la ficha del comandante (ícono de perfil, arriba).</p></div>
-      <div class="subnav"><button type="button" data-view="hoy">Hoy</button><button type="button" data-view="semana">Semana</button></div>
+      <div><h2>Personal</h2><p>Tu día, cómo va la semana y tu entrenamiento con Heracles. Tus hábitos se editan en tu Perfil (ícono junto al engranaje).</p></div>
+      <div class="subnav"><button type="button" data-view="hoy">Hoy</button><button type="button" data-view="semana">Semana</button><button type="button" data-view="entreno">Entrenamiento</button></div>
     </div>
 
     <section class="panel" id="p-hoy" hidden>
@@ -226,6 +226,9 @@
         <div class="card stack"><h3>Últimas 4 semanas</h3><div class="heat" id="w-heat" aria-label="Mapa de días cumplidos"></div></div>
         <div class="card stack"><h3>Progresión</h3><div class="bars" id="w-prog"></div></div>
       </div>
+    </section>
+    <section class="panel" id="p-entreno" hidden>
+      <div id="en-root" class="stack"><div class="empty">Cargando tu entrenamiento…</div></div>
     </section>
   </section>
 
@@ -370,8 +373,8 @@
   <!-- SISTEMA Y MEJORA (engranaje) -->
   <section class="group" id="g-sistema" role="tabpanel" aria-label="Sistema y mejora" hidden style="--gc:var(--c4)">
     <div class="ghead">
-      <div><h2>Sistema y mejora</h2><p>Revisiones del escuadrón, tus solicitudes de mejora y cómo evoluciona el sistema. Tu perfil, tus hábitos y GitHub están en la ficha del comandante.</p></div>
-      <div class="subnav"><button type="button" data-view="revisiones">Revisiones</button><button type="button" data-view="mejoras">Mejoras</button><button type="button" data-view="escuadron">Escuadrón</button><button type="button" data-view="ajustes" id="sub-ajustes">Ajustes</button></div>
+      <div><h2>Sistema y mejora</h2><p>Revisiones del escuadrón, tus solicitudes de mejora y cómo evoluciona el sistema. Tu perfil, tus hábitos y GitHub están en la perfil.</p></div>
+      <div class="subnav"><button type="button" data-view="revisiones">Revisiones</button><button type="button" data-view="mejoras">Mejoras</button><button type="button" data-view="escuadron">Escuadrón</button><button type="button" data-view="diagnostico">Diagnóstico</button><button type="button" data-view="ajustes" id="sub-ajustes">Ajustes</button></div>
     </div>
 
     <div class="forcebox">
@@ -407,6 +410,12 @@
         <div class="roster" id="s-depts"><div class="empty">Cargando departamentos…</div></div>
       </div>
     </section>
+    <section class="panel" id="p-diagnostico" hidden>
+      <div class="card stack">
+        <div class="row between"><h2>Diagnóstico de agentes</h2><button class="btn" type="button" id="dg-run">Correr ronda completa</button></div>
+        <div id="dg-body" class="stack"></div>
+      </div>
+    </section>
     <section class="panel" id="p-ajustes" hidden>
             <div class="card stack">
         <div class="row between"><h2>Conexión con Claude</h2><span class="chip" id="aj-keystate">—</span></div>
@@ -434,6 +443,7 @@
   </section>
 </div>
 <button class="fab" id="qn-fab" type="button" aria-label="Nota rápida"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="fab-l">Nota rápida</span><b class="fab-n" id="qn-badge" hidden>0</b></button>
+<div class="entimer" id="en-timer" role="status" aria-live="polite" hidden></div>
 <div class="popback" id="qn-back" hidden>
   <div class="card pop qn" id="qn-pop" role="dialog" aria-modal="true" aria-labelledby="qn-title">
     <div class="qnhead"><h2 id="qn-title">Nota rápida</h2><button class="popx" type="button" id="qn-close" aria-label="Cerrar">×</button></div>
@@ -445,7 +455,7 @@
 </div>
 <div class="popback" id="fi-back" hidden>
   <div class="card pop ficha" id="fi-pop" role="dialog" aria-modal="true" aria-labelledby="fi-name">
-    <div class="fi-bar"><span class="fi-tag">Ficha del comandante</span><button class="popx" type="button" id="fi-close" aria-label="Cerrar">×</button></div>
+    <div class="fi-bar"><span class="fi-tag">Perfil</span><button class="popx" type="button" id="fi-close" aria-label="Cerrar">×</button></div>
     <div class="fi-head pxbox">
       <button type="button" class="fi-av" id="fi-av" aria-expanded="false" aria-controls="fi-avpick" aria-label="Cambiar avatar"><span id="fi-avimg"></span><span class="fi-edit">Cambiar avatar</span></button>
       <div class="fi-id">
@@ -465,7 +475,7 @@
     <p class="hint" style="margin:-2px 0 0">Las rachas y los días cumplidos cuentan los últimos 180 días registrados.</p>
     <div class="stack" id="fi-folds">
       <section class="card fold" id="fi-f-perfil">
-        <h3 class="fold-hh"><button type="button" class="fold-h" id="fi-h-perfil" data-f="perfil" aria-expanded="false" aria-controls="fi-b-perfil"><span class="fold-n">Perfil del comandante</span><span class="fold-s" id="fi-s-perfil"></span></button></h3>
+        <h3 class="fold-hh"><button type="button" class="fold-h" id="fi-h-perfil" data-f="perfil" aria-expanded="false" aria-controls="fi-b-perfil"><span class="fold-n">Meta y contexto</span><span class="fold-s" id="fi-s-perfil"></span></button></h3>
         <div class="fold-b" id="fi-b-perfil" hidden>
           <div class="stack" id="perfil">
             <p class="hint">Lo reciben todos los agentes y Odín en cada chat y en cada misión, para que no te traten como a un usuario cualquiera. Escribe corto; en las listas, una idea por línea.</p>
